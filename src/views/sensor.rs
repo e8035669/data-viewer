@@ -9,6 +9,7 @@ use crate::components::input::Input;
 use crate::views::endpoints::{Endpoint, EndpointTrait, Endpoints};
 use crate::views::projects::{Project, Projects};
 use anyhow::{anyhow, Error, Result};
+use async_std::task::sleep;
 use base64::prelude::*;
 use dioxus::logger::tracing;
 use dioxus::prelude::*;
@@ -529,7 +530,8 @@ pub fn SensorView3(
     device: ReadSignal<Device>,
     ctx: Store<PageContext>,
 ) -> Element {
-    let resource: Resource<Result<_, Error>> = use_resource(move || async move {
+    let mut timer = use_signal(|| 10);
+    let mut resource: Resource<Result<_, Error>> = use_resource(move || async move {
         let device_id = device().id;
         let project_id = project().project_key;
         let client = reqwest::Client::new();
@@ -555,7 +557,27 @@ pub fn SensorView3(
         Ok(sensor_data)
     });
 
+    use_future(move || async move {
+        loop {
+            sleep(Duration::from_secs(1)).await;
+            *timer.write() -= 1;
+            if timer() < 0 {
+                timer.set(10);
+                if resource.finished() {
+                    resource.restart();
+                }
+            }
+        }
+    });
+
     rsx! {
+        Button {
+            onclick: move |_| {
+                resource.restart();
+                timer.set(10);
+            },
+            "Refresh: {timer()}"
+        }
         div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4",
             if let Some(response) = &*resource.read() {
                 match response {
@@ -587,20 +609,23 @@ pub fn SensorPanel3(
     ctx: Store<PageContext>,
     sensor_data: ReadSignal<SensorWithData>,
 ) -> Element {
-    let data = sensor_data().data;
-    let value = data.map(|d| d.value.join(" ")).unwrap_or_default();
-    let value = use_signal(|| value);
+    let data = use_memo(move || sensor_data().data);
+    let value = use_memo(move || data().map(|d| d.value.join(" ")).unwrap_or_default());
 
-    let sensor = sensor_data().sensor;
+    let sensor = use_memo(move || sensor_data().sensor);
 
     let img_data: Resource<Result<_, Error>> = use_resource(move || async move {
         let sensor = sensor_data().sensor;
-        if sensor.kind == SensorType::Snapshot && value().len() > 11 {
+        let data = sensor_data().data;
+        let first_value = data
+            .map(|d| d.value.first().cloned().unwrap_or_default())
+            .unwrap_or_default();
+        if sensor.kind == SensorType::Snapshot && first_value.len() > 11 {
             let client = reqwest::Client::new();
             let sensor_id = sensor.id;
             let device_id = device().id;
             let project_key = project().project_key;
-            let snapshot_id = value()[11..].to_string();
+            let snapshot_id = first_value[11..].to_string();
             let url = endpoint().snapshot(&device_id, &sensor_id, &snapshot_id);
             let img = client
                 .get(url)
@@ -616,14 +641,15 @@ pub fn SensorPanel3(
         }
     });
 
-    let sensor_id = sensor.id.clone();
-    let btnclick = move |_| ctx.view_sensor_attr(&sensor_id);
+    let sensor_id = use_memo(move || sensor().id.clone());
+
+    let btnclick = move |_| ctx.view_sensor_attr(&sensor_id());
 
     rsx! {
         Card {
             CardHeader {
                 // CardTitle displays the main heading.
-                CardTitle { "{sensor.name}" }
+                CardTitle { {sensor().name} }
                 CardAction {
                     Button { variant: ButtonVariant::Ghost, onclick: btnclick,
                         Icon { icon: fa_solid_icons::FaSliders }
@@ -650,7 +676,7 @@ pub fn SensorPanel3(
             }
             // CardFooter contains footer actions or information.
             CardFooter {
-                p { "{sensor.id}" }
+                p { {sensor().id} }
             }
         }
     }

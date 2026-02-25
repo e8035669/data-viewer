@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.101"
+async-std = "1.13.2"
 base64 = "0.22.1"
 dioxus = { version = "0.7.1", features = ["router"] }
 dioxus-free-icons = { version = "0.10.0", features = ["font-awesome-regular", "font-awesome-solid"] }
