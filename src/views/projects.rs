@@ -3,8 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::toast::{use_toast, ToastOptions};
-use dioxus_sdk_storage::{use_synced_storage, LocalStorage};
-use serde::{Deserialize, Serialize};
+use crate::models::{Project, Projects};
 
 use crate::{
     components::{
@@ -18,14 +17,10 @@ use crate::{
             SelectValue,
         },
     },
-    views::endpoints::Endpoints,
+    models::Endpoints,
 };
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Default)]
-pub struct Project {
-    pub project_key: String,
-    pub endpoint_key: String,
-}
+
 
 #[derive(Store)]
 pub struct AddProjectCtx {
@@ -244,7 +239,4 @@ pub fn ProjectCard(name: String, project: Project, delete_ctx: Store<DeleteCtx>)
     }
 }
 
-pub type Projects = HashMap<String, Project>;
-pub fn use_project_persistence() -> Signal<Projects> {
-    use_synced_storage::<LocalStorage, _>("projects".to_string(), || Projects::new())
-}
+// Projects type is provided by `crate::models::Projects`.

@@ -6,8 +6,8 @@ use dioxus_primitives::{
     label::Label,
     toast::{use_toast, ToastOptions},
 };
-use dioxus_sdk_storage::{use_synced_storage, LocalStorage};
-use serde::{Deserialize, Serialize};
+use crate::models::{Endpoint, EndpointTrait, Endpoints, GeneralEndpoint, EdgeEndpoint};
+use crate::persistence::{use_count_persistent, use_endpoints_persistent};
 
 use crate::components::{
     button::{Button, ButtonVariant},
@@ -17,146 +17,7 @@ use crate::components::{
     radio_group::{RadioGroup, RadioItem},
 };
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
-pub enum Endpoint {
-    General(GeneralEndpoint),
-    Edge(EdgeEndpoint),
-}
 
-impl EndpointTrait for Endpoint {
-    fn metadata(&self) -> String {
-        match self {
-            Endpoint::General(endpoint) => endpoint.metadata(),
-            Endpoint::Edge(endpoint) => endpoint.metadata(),
-        }
-    }
-
-    fn rawdata(&self, device_id: &str) -> String {
-        match self {
-            Endpoint::General(endpoint) => endpoint.rawdata(device_id),
-            Endpoint::Edge(endpoint) => endpoint.rawdata(device_id),
-        }
-    }
-
-    fn snapshot(&self, device_id: &str, sensor_id: &str, snapshot_id: &str) -> String {
-        match self {
-            Endpoint::General(endpoint) => endpoint.snapshot(device_id, sensor_id, snapshot_id),
-            Endpoint::Edge(endpoint) => endpoint.snapshot(device_id, sensor_id, snapshot_id),
-        }
-    }
-
-    fn baseurl(&self) -> String {
-        match self {
-            Endpoint::General(endpoint) => endpoint.baseurl(),
-            Endpoint::Edge(endpoint) => endpoint.baseurl(),
-        }
-    }
-
-    fn kind(&self) -> String {
-        match self {
-            Endpoint::General(endpoint) => endpoint.kind(),
-            Endpoint::Edge(endpoint) => endpoint.kind(),
-        }
-    }
-
-    fn device(&self, device_id: &str) -> String {
-        match self {
-            Endpoint::General(endpoint) => endpoint.device(device_id),
-            Endpoint::Edge(endpoint) => endpoint.device(device_id),
-        }
-    }
-
-    fn sensor(&self, device_id: &str, sensor_id: &str) -> String {
-        match self {
-            Endpoint::General(endpoint) => endpoint.sensor(device_id, sensor_id),
-            Endpoint::Edge(endpoint) => endpoint.sensor(device_id, sensor_id),
-        }
-    }
-}
-
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
-pub struct GeneralEndpoint {
-    pub base_url: String,
-}
-
-pub trait EndpointTrait {
-    fn sensor(&self, device_id: &str, sensor_id: &str) -> String;
-    fn metadata(&self) -> String;
-    fn rawdata(&self, device_id: &str) -> String;
-    fn snapshot(&self, device_id: &str, sensor_id: &str, snapshot_id: &str) -> String;
-    fn baseurl(&self) -> String;
-    fn kind(&self) -> String;
-    fn device(&self, device_id: &str) -> String;
-}
-
-impl EndpointTrait for GeneralEndpoint {
-    fn metadata(&self) -> String {
-        format!("{}/metadata", self.base_url)
-    }
-    fn rawdata(&self, device_id: &str) -> String {
-        format!("{}/device/{device_id}/rawdata", self.base_url)
-    }
-    fn snapshot(&self, device_id: &str, sensor_id: &str, snapshot_id: &str) -> String {
-        format!(
-            "{}/device/{device_id}/sensor/{sensor_id}/snapshot/{snapshot_id}",
-            self.base_url
-        )
-    }
-
-    fn baseurl(&self) -> String {
-        self.base_url.to_owned()
-    }
-
-    fn kind(&self) -> String {
-        "General".to_string()
-    }
-
-    fn device(&self, device_id: &str) -> String {
-        format!("{}/device/{device_id}", self.base_url)
-    }
-
-    fn sensor(&self, device_id: &str, sensor_id: &str) -> String {
-        format!("{}/device/{device_id}/sensor/{sensor_id}", self.base_url)
-    }
-}
-
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
-pub struct EdgeEndpoint {
-    pub base_url: String,
-}
-
-impl EndpointTrait for EdgeEndpoint {
-    fn sensor(&self, device_id: &str, sensor_id: &str) -> String {
-        format!("{}/device/{device_id}/sensor/{sensor_id}", self.base_url)
-    }
-
-    fn metadata(&self) -> String {
-        format!("{}/metadata", self.base_url)
-    }
-
-    fn rawdata(&self, device_id: &str) -> String {
-        format!("{}/device/{device_id}/rawdata", self.base_url)
-    }
-
-    fn snapshot(&self, device_id: &str, sensor_id: &str, snapshot_id: &str) -> String {
-        format!(
-            "{}/snapshot/device/{device_id}/sensor/{sensor_id}/snapshot/{snapshot_id}",
-            self.base_url
-        )
-    }
-
-    fn baseurl(&self) -> String {
-        self.base_url.to_owned()
-    }
-
-    fn kind(&self) -> String {
-        "Edge".to_string()
-    }
-
-    fn device(&self, device_id: &str) -> String {
-        format!("{}/device/{device_id}", self.base_url)
-    }
-}
 
 #[derive(Store, Default)]
 struct NewEndpointInfo {
@@ -391,14 +252,7 @@ pub fn Storage() -> Element {
     }
 }
 
-fn use_count_persistent() -> Signal<i32> {
-    use_synced_storage::<LocalStorage, _>("count".to_string(), || 0)
-}
-
-pub type Endpoints = HashMap<String, Endpoint>;
-pub fn use_endpoints_persistent() -> Signal<Endpoints> {
-    use_synced_storage::<LocalStorage, _>("endpoints".to_string(), || Endpoints::new())
-}
+// persistence helpers are provided by `crate::persistence`
 
 #[component]
 pub fn Storage2() -> Element {

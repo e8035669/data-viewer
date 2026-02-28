@@ -6,8 +6,6 @@ use crate::components::card::{
     Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 };
 use crate::components::input::Input;
-use crate::views::endpoints::{Endpoint, EndpointTrait, Endpoints};
-use crate::views::projects::{Project, Projects};
 use anyhow::{anyhow, Error, Result};
 use async_std::task::sleep;
 use base64::prelude::*;
@@ -18,97 +16,10 @@ use dioxus_free_icons::Icon;
 use dioxus_primitives::toast::{use_toast, ToastOptions};
 use reqwest::Client;
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SensorType {
-    #[default]
-    Gauge,
-    Text,
-    Switch,
-    Snapshot,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
-pub struct Attribute {
-    pub key: String,
-    pub value: String,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default)]
-
-pub struct Sensor {
-    pub id: String,
-    pub name: String,
-    pub desc: Option<String>,
-    #[serde(rename = "type")]
-    pub kind: SensorType,
-    pub uri: Option<String>,
-    pub formula: Option<String>,
-    pub attributes: Option<Vec<Attribute>>,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default)]
-
-pub struct EditSensor {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub desc: Option<String>,
-    #[serde(rename = "type")]
-    pub kind: SensorType,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uri: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub formula: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub attributes: Option<Vec<Attribute>>,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Store, Default)]
-
-pub struct Device {
-    pub id: String,
-    pub name: String,
-    pub desc: Option<String>,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub uri: Option<String>,
-    pub lat: Option<f64>,
-    pub lon: Option<f64>,
-    pub attributes: Option<Vec<Attribute>>,
-    pub sensors: Option<Vec<Sensor>>,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Store, Default)]
-
-pub struct EditDevice {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub desc: Option<String>,
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uri: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lat: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lon: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub attributes: Option<Vec<Attribute>>,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
-pub struct RawData {
-    pub id: String,
-    #[serde(rename = "deviceId")]
-    pub device_id: String,
-    pub value: Vec<String>,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
-pub struct SensorWithData {
-    pub sensor: Sensor,
-    pub data: Option<RawData>,
-}
+use crate::models::{
+    Endpoint, EndpointTrait, Endpoints, Project, Projects, Attribute, Device, EditDevice, EditSensor,
+    RawData, Sensor, SensorType, SensorWithData,
+};
 
 #[component]
 pub fn SensorPanel() -> Element {

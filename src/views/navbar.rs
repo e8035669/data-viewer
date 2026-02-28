@@ -9,7 +9,7 @@ use crate::{
         },
         toast::ToastProvider,
     },
-    views::projects::Projects,
+    models::Projects,
     Route,
 };
 use dioxus::prelude::*;

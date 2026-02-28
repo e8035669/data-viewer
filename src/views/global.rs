@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::views::{endpoints::use_endpoints_persistent, projects::use_project_persistence};
+use crate::persistence::{use_endpoints_persistent, use_project_persistence};
 
 
 
