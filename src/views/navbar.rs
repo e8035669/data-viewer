@@ -115,7 +115,7 @@ pub fn Navbar() -> Element {
                 SidebarRail {}
             }
 
-            SidebarInset { class: "flex-none",
+            SidebarInset {
                 header { class: "flex items-center gap-2 h-14 p-4",
                     div { class: "flex items-center gap-3",
                         SidebarTrigger {}

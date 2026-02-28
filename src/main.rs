@@ -65,6 +65,7 @@ const COMPONENT_CSS: Asset = asset!("/assets/dx-components-theme.css");
 fn main() {
     // The `launch` function is the main entry point for a dioxus app. It takes a component and renders it with the platform feature
     // you have enabled
+    dioxus_sdk_storage::set_dir!();
     dioxus::launch(App);
 }
 
