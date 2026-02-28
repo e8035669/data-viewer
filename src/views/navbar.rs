@@ -53,16 +53,28 @@ pub fn Navbar() -> Element {
                 }
                 SidebarContent {
                     SidebarGroup {
+                        SidebarGroupLabel { "Home" }
+                        SidebarGroupContent {
+                            SidebarMenu {
+                                SidebarLink {
+                                    to: Route::Home {},
+                                    icon: fa_solid_icons::FaHouse,
+                                    "Home"
+                                }
+                            }
+                        }
+                    }
+
+                    SidebarGroup {
                         SidebarGroupLabel { "Projects" }
                         SidebarGroupContent {
-
                             SidebarMenu {
+                                NavProjects { keys }
                                 SidebarLink {
                                     to: Route::ProjectsView {},
                                     icon: fa_solid_icons::FaCirclePlus,
                                     "Add Project"
                                 }
-                                NavProjects { keys }
                             }
                         }
                     }
@@ -83,11 +95,6 @@ pub fn Navbar() -> Element {
                     SidebarGroup {
                         SidebarGroupLabel { "Other" }
                         SidebarContent {
-                            SidebarLink {
-                                to: Route::Home {},
-                                icon: fa_solid_icons::FaHouse,
-                                "Home"
-                            }
                             SidebarLink {
                                 to: Route::Blog { id: 1 },
                                 icon: fa_solid_icons::FaHouse,
