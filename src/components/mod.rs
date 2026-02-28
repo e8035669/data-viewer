@@ -19,3 +19,4 @@ pub mod dialog;
 pub mod toast;
 pub mod select;
 pub mod radio_group;
+pub mod textarea;

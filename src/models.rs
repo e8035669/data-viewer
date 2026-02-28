@@ -1,6 +1,7 @@
-use std::collections::HashMap;
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use core::fmt;
+use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "lowercase")]
@@ -82,12 +83,88 @@ pub struct RawData {
     #[serde(rename = "deviceId")]
     pub device_id: String,
     pub value: Vec<String>,
+    pub time: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct SensorWithData {
     pub sensor: Sensor,
     pub data: Option<RawData>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ActiveStatus {
+    #[default]
+    Unset,
+    Start,
+    Online,
+    Offline,
+    Stop,
+    Abnormal,
+}
+
+impl fmt::Display for ActiveStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ActiveStatus::Unset => write!(f, "Unset"),
+            ActiveStatus::Start => write!(f, "Start"),
+            ActiveStatus::Online => write!(f, "Online"),
+            ActiveStatus::Offline => write!(f, "Offline"),
+            ActiveStatus::Stop => write!(f, "Stop"),
+            ActiveStatus::Abnormal => write!(f, "Abnormal"),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+pub struct ActiveInfo {
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
+    pub status: ActiveStatus,
+    pub record: Option<i32>,
+    #[serde(rename = "lastDataTime")]
+    pub last_data_time: Option<String>,
+    #[serde(rename = "createTime")]
+    pub create_time: String,
+}
+
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+
+pub struct ActiveDevice {
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
+    pub enable: bool,
+    pub period: String,
+    #[serde(rename = "minUploads")]
+    pub min_uploads: Option<i32>,
+    #[serde(rename = "maxUploads")]
+    pub max_uploads: Option<i32>,
+    #[serde(rename = "createTime")]
+    pub create_time: Option<u64>,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+
+pub struct ActiveNotifySetting {
+    pub to: String,
+    pub message: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+
+pub struct ActiveNotify {
+    pub id: i32,
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
+    pub enable: bool,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub setting: ActiveNotifySetting,
+    #[serde(rename = "createTime")]
+    pub create_time: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -145,6 +222,27 @@ impl EndpointTrait for Endpoint {
             Endpoint::Edge(endpoint) => endpoint.sensor(device_id, sensor_id),
         }
     }
+
+    fn active_notify(&self, device_id: &str) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.active_notify(device_id),
+            Endpoint::Edge(endpoint) => endpoint.active_notify(device_id),
+        }
+    }
+
+    fn active_setting(&self, device_id: &str) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.active_setting(device_id),
+            Endpoint::Edge(endpoint) => endpoint.active_setting(device_id),
+        }
+    }
+
+    fn active(&self, device_id: &str) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.active(device_id),
+            Endpoint::Edge(endpoint) => endpoint.active(device_id),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -153,6 +251,9 @@ pub struct GeneralEndpoint {
 }
 
 pub trait EndpointTrait {
+    fn active_notify(&self, device_id: &str) -> String;
+    fn active_setting(&self, device_id: &str) -> String;
+    fn active(&self, device_id: &str) -> String;
     fn sensor(&self, device_id: &str, sensor_id: &str) -> String;
     fn metadata(&self) -> String;
     fn rawdata(&self, device_id: &str) -> String;
@@ -191,6 +292,18 @@ impl EndpointTrait for GeneralEndpoint {
     fn sensor(&self, device_id: &str, sensor_id: &str) -> String {
         format!("{}/device/{device_id}/sensor/{sensor_id}", self.base_url)
     }
+
+    fn active(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/active", self.base_url)
+    }
+
+    fn active_setting(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/active/setting", self.base_url)
+    }
+
+    fn active_notify(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/active/notify", self.base_url)
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -228,6 +341,18 @@ impl EndpointTrait for EdgeEndpoint {
 
     fn device(&self, device_id: &str) -> String {
         format!("{}/device/{device_id}", self.base_url)
+    }
+
+    fn active_notify(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/active/notify", self.base_url)
+    }
+
+    fn active_setting(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/active/setting", self.base_url)
+    }
+
+    fn active(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/active", self.base_url)
     }
 }
 

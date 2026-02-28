@@ -5,7 +5,12 @@ use crate::components::button::{Button, ButtonVariant};
 use crate::components::card::{
     Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 };
+use crate::components::dropdown_menu::{
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+};
 use crate::components::input::Input;
+use crate::components::label::Label;
+use crate::components::textarea::Textarea;
 use anyhow::{anyhow, Error, Result};
 use async_std::task::sleep;
 use base64::prelude::*;
@@ -17,8 +22,8 @@ use dioxus_primitives::toast::{use_toast, ToastOptions};
 use reqwest::Client;
 
 use crate::models::{
-    Endpoint, EndpointTrait, Endpoints, Project, Projects, Attribute, Device, EditDevice, EditSensor,
-    RawData, Sensor, SensorType, SensorWithData,
+    ActiveDevice, ActiveInfo, Attribute, Device, EditDevice, EditSensor, Endpoint, EndpointTrait,
+    Endpoints, Project, Projects, RawData, Sensor, SensorType, SensorWithData,
 };
 
 #[component]
@@ -312,9 +317,13 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
 #[component]
 pub fn DevicesPanels3(devices: Vec<Device>, ctx: Store<PageContext>) -> Element {
     rsx! {
-        for d in devices {
-            DevicePanel3 { device: d.clone(), ctx }
+        h1 { class: "text-2xl mb-4", "Devices" }
+        div { class: "grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
+            for d in devices {
+                DevicePanel3 { device: d.clone(), ctx }
+            }
         }
+
     }
 }
 
@@ -335,7 +344,7 @@ pub fn DevicePanel3(device: Device, ctx: Store<PageContext>) -> Element {
                         Button {
                             variant: ButtonVariant::Ghost,
                             onclick: view_device_attr,
-                            Icon { icon: fa_solid_icons::FaSliders }
+                            Icon { icon: fa_solid_icons::FaGear }
                         }
                         Button {
                             variant: ButtonVariant::Ghost,
@@ -587,7 +596,10 @@ pub fn SensorPanel3(
             }
             // CardFooter contains footer actions or information.
             CardFooter {
-                p { {sensor().id} }
+                div { class: "flex flex-col",
+                    p { {data().map(|d| d.time).unwrap_or_default()} }
+                    p { {sensor().id} }
+                }
             }
         }
     }
@@ -689,65 +701,97 @@ pub fn DeviceAttrPanelImpl(
     };
 
     rsx! {
-        Card {
-            CardHeader {
-                CardTitle { "Attributes" }
-                CardAction {
-                    Button {
-                        class: "m-4",
-                        onclick: move |_| {
-                            attributes
-                                .write()
-                                .push(Attribute {
-                                    key: String::new(),
-                                    value: String::new(),
-                                });
-                        },
-                        "Add"
-                    }
-                    Button {
-                        variant: if is_dirty() { ButtonVariant::Primary } else { ButtonVariant::Secondary },
-                        onclick: save_attrs,
-                        "Save"
-                    }
-                
+        div { class: "grid grid-cols-[1fr_auto] items-center",
+            h1 { class: "text-2xl", "Info" }
+            Button { "Save(TODO)" }
+        }
+        div {
+            table { class: "table-auto w-full border-separate border-spacing-2",
+                tr {
+                    td { "ID" }
+                    td { {device().id} }
                 }
-            }
-            CardContent {
-                for (i , attr) in attributes().iter().enumerate() {
-                    div { class: "flex gap-4 mb-8",
-                        div { class: "flex flex-1 gap-4 flex-wrap",
-                            Input {
-                                class: "input flex-1",
-                                placeholder: "Key",
-                                onchange: move |e: FormEvent| {
-                                    attributes.write()[i].key = e.value();
-                                },
-                                value: attr.key.clone(),
-                            }
-                            Input {
-                                class: "input flex-1",
-
-                                placeholder: "Value",
-                                onchange: move |e: FormEvent| {
-                                    attributes.write()[i].value = e.value();
-                                },
-                                value: attr.value.clone(),
-                            }
-                        
-                        }
-                        Button {
-                            variant: ButtonVariant::Ghost,
-                            onclick: move |_| {
-                                attributes.write().remove(i);
-                            },
-                            Icon { icon: fa_solid_icons::FaXmark }
-                        }
-                    
+                tr {
+                    td { "Type" }
+                    td { {device().kind} }
+                }
+                tr {
+                    td { "Name" }
+                    td {
+                        Input { class: "input w-full", value: device().name }
+                    }
+                }
+                tr {
+                    td { "Desc" }
+                    td {
+                        Textarea { value: device().desc }
                     }
                 }
             }
         }
+
+        div { class: "grid grid-cols-[1fr_auto] items-center",
+            h1 { class: "text-2xl", "Attributes" }
+            div {
+                Button {
+                    class: "m-4",
+                    onclick: move |_| {
+                        attributes
+                            .write()
+                            .push(Attribute {
+                                key: String::new(),
+                                value: String::new(),
+                            });
+                    },
+                    "Add"
+                }
+                Button {
+                    variant: if is_dirty() { ButtonVariant::Primary } else { ButtonVariant::Secondary },
+                    onclick: save_attrs,
+                    "Save"
+                }
+            }
+        }
+        div {
+            for (i , attr) in attributes().iter().enumerate() {
+                div { class: "flex gap-4 mb-8",
+                    div { class: "flex flex-1 gap-4 flex-wrap",
+                        Input {
+                            class: "input flex-1",
+                            placeholder: "Key",
+                            onchange: move |e: FormEvent| {
+                                attributes.write()[i].key = e.value();
+                            },
+                            value: attr.key.clone(),
+                        }
+                        Input {
+                            class: "input flex-1",
+
+                            placeholder: "Value",
+                            onchange: move |e: FormEvent| {
+                                attributes.write()[i].value = e.value();
+                            },
+                            value: attr.value.clone(),
+                        }
+                    
+                    }
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        onclick: move |_| {
+                            attributes.write().remove(i);
+                        },
+                        Icon { icon: fa_solid_icons::FaXmark }
+                    }
+                
+                }
+            }
+        }
+
+        div { class: "grid grid-cols-[1fr_auto] items-center",
+            h1 { class: "text-2xl", "Active Monitor" }
+        }
+
+        MonitorPanel { project, endpoint, device }
     }
 }
 
@@ -966,6 +1010,101 @@ pub fn SensorAttrPanelImpl(
                     }
                 }
             }
+        }
+    }
+}
+
+#[component]
+pub fn MonitorPanel(
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    device: ReadSignal<Device>,
+) -> Element {
+    let active_status = use_resource(move || async move {
+        let client = reqwest::Client::new();
+        let url = endpoint().active(&device().id);
+        client
+            .get(url)
+            .header("CK", project().project_key.as_str())
+            .send()
+            .await?
+            .json::<Option<ActiveInfo>>()
+            .await
+    });
+
+    let active_setting = use_resource(move || async move {
+        let client = reqwest::Client::new();
+        let url = endpoint().active_setting(&device().id);
+        client
+            .get(url)
+            .header("CK", project().project_key.as_str())
+            .send()
+            .await?
+            .json::<ActiveDevice>()
+            .await
+    });
+
+    let active_rsx = if let Some(active_status) = &*active_status.read() {
+        match active_status {
+            Ok(active_status) => {
+                if let Some(active_status) = active_status {
+                    rsx! {
+                        div {
+                            p { "{active_status.status}" }
+                            p { "{active_status.create_time}" }
+                        }
+                    }
+                } else {
+                    rsx! {
+                        p { "Unset" }
+                    }
+                }
+            }
+            Err(_) => rsx! {
+                p { "Load Error" }
+            },
+        }
+    } else {
+        rsx! {
+            p { "Loading" }
+        }
+    };
+
+    let active_setting_rsx = if let Some(active_setting) = &*active_setting.read() {
+        match active_setting {
+            Ok(setting) => {
+                rsx! {
+                    div { class: "grid grid-cols-[auto_auto] gap-2",
+                        div { "Device ID:" }
+                        div { {setting.device_id.clone()} }
+                        div { "Enabled:" }
+                        div { "{setting.enable}" }
+                        div { "Period:" }
+                        div { {setting.period.clone()} }
+                        div { "Min Uploads:" }
+                        div { {setting.min_uploads.map(|v| v.to_string()).unwrap_or_default()} }
+                        div { "Max Uploads:" }
+                        div { {setting.max_uploads.map(|v| v.to_string()).unwrap_or_default()} }
+                        div { "Created:" }
+                        div { "{setting.create_time.unwrap_or_default()}" }
+                    }
+                }
+            }
+            Err(_) => rsx! {
+                p { "Load Error" }
+            },
+        }
+    } else {
+        rsx! {
+            p { "Loading" }
+        }
+    };
+
+    rsx! {
+        {active_rsx}
+        div { class: "mt-4",
+            h2 { class: "text-lg font-bold", "Active Setting" }
+            {active_setting_rsx}
         }
     }
 }
