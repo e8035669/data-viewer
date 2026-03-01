@@ -22,8 +22,8 @@ use dioxus_primitives::toast::{use_toast, ToastOptions};
 use reqwest::Client;
 
 use crate::models::{
-    ActiveDevice, ActiveInfo, Attribute, Device, EditDevice, EditSensor, Endpoint, EndpointTrait,
-    Endpoints, Project, Projects, RawData, Sensor, SensorType, SensorWithData,
+    ActiveDevice, ActiveInfo, ActiveNotify, Attribute, Device, EditDevice, EditSensor, Endpoint,
+    EndpointTrait, Endpoints, Project, Projects, RawData, Sensor, SensorType, SensorWithData,
 };
 
 #[component]
@@ -655,6 +655,9 @@ pub fn DeviceAttrPanelImpl(
     let mut attributes = use_signal(|| device().attributes.unwrap_or_default().clone());
     let is_dirty = use_memo(move || attributes() != device().attributes.unwrap_or_default());
 
+    let mut device_info = use_signal(|| device().clone());
+    let is_device_dirty = use_memo(move || device_info() != device());
+
     let save_attrs = move |_| async move {
         let edit_device = EditDevice {
             name: device().name.clone(),
@@ -701,37 +704,36 @@ pub fn DeviceAttrPanelImpl(
     };
 
     rsx! {
-        div { class: "grid grid-cols-[1fr_auto] items-center",
-            h1 { class: "text-2xl", "Info" }
-            Button { "Save(TODO)" }
+        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
+            h1 { class: "text-2xl font-bold", "Device Info" }
+            Button { variant: if is_device_dirty() { ButtonVariant::Primary } else { ButtonVariant::Secondary },
+                "Save(TODO)"
+            }
         }
-        div {
-            table { class: "table-auto w-full border-separate border-spacing-2",
-                tr {
-                    td { "ID" }
-                    td { {device().id} }
+        div { class: "grid grid-cols-[auto_auto] gap-2 w-full",
+            div { "ID" }
+            div { {device().id} }
+            div { "Type" }
+            div { {device().kind} }
+            div { "Name" }
+            div {
+                Input {
+                    class: "input w-full",
+                    oninput: move |i: FormEvent| { device_info.write().name = i.value() },
+                    value: device_info().name,
                 }
-                tr {
-                    td { "Type" }
-                    td { {device().kind} }
-                }
-                tr {
-                    td { "Name" }
-                    td {
-                        Input { class: "input w-full", value: device().name }
-                    }
-                }
-                tr {
-                    td { "Desc" }
-                    td {
-                        Textarea { value: device().desc }
-                    }
+            }
+            div { "Desc" }
+            div {
+                Textarea {
+                    oninput: move |i: FormEvent| { device_info.write().desc = Some(i.value()) },
+                    value: device_info().desc,
                 }
             }
         }
 
-        div { class: "grid grid-cols-[1fr_auto] items-center",
-            h1 { class: "text-2xl", "Attributes" }
+        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
+            h1 { class: "text-2xl font-bold", "Attributes" }
             div {
                 Button {
                     class: "m-4",
@@ -785,10 +787,6 @@ pub fn DeviceAttrPanelImpl(
                 
                 }
             }
-        }
-
-        div { class: "grid grid-cols-[1fr_auto] items-center",
-            h1 { class: "text-2xl", "Active Monitor" }
         }
 
         MonitorPanel { project, endpoint, device }
@@ -1044,6 +1042,18 @@ pub fn MonitorPanel(
             .await
     });
 
+    let active_notify = use_resource(move || async move {
+        let client = reqwest::Client::new();
+        let url = endpoint().active_notify(&device().id);
+        client
+            .get(url)
+            .header("CK", project().project_key.as_str())
+            .send()
+            .await?
+            .json::<Vec<ActiveNotify>>()
+            .await
+    });
+
     let active_rsx = if let Some(active_status) = &*active_status.read() {
         match active_status {
             Ok(active_status) => {
@@ -1100,11 +1110,90 @@ pub fn MonitorPanel(
         }
     };
 
+    let active_notify_rsx = if let Some(active_notify) = &*active_notify.read() {
+        match active_notify {
+            Ok(notifies) => rsx! {
+                ActiveNotifySection { notifies: notifies.clone() }
+            },
+            Err(_) => rsx! {
+                p { "Load Error" }
+            },
+        }
+    } else {
+        rsx! {
+            p { "Loading" }
+        }
+    };
+
     rsx! {
+        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
+            h1 { class: "text-2xl font-bold", "Active Monitor Status" }
+        }
         {active_rsx}
-        div { class: "mt-4",
-            h2 { class: "text-lg font-bold", "Active Setting" }
-            {active_setting_rsx}
+
+        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
+            h1 { class: "text-2xl font-bold", "Active Setting" }
+            Button { "Save(TODO)" }
+        }
+        {active_setting_rsx}
+
+        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
+            h1 { class: "text-2xl font-bold", "Active Notifications" }
+        }
+        {active_notify_rsx}
+
+    }
+}
+
+#[component]
+fn ActiveNotifyCard(notify: ActiveNotify) -> Element {
+    rsx! {
+        div { class: "border rounded-lg p-4 relative",
+            div { class: "absolute top-2 right-2 flex space-x-2",
+                Button { variant: ButtonVariant::Ghost, "Edit(TODO)" }
+                Button { variant: ButtonVariant::Ghost, "Delete(TODO)" }
+            }
+            div { class: "grid grid-cols-[auto_auto] gap-2",
+                div { class: "font-semibold", "ID:" }
+                div { {notify.id.to_string()} }
+                div { class: "font-semibold", "Name:" }
+                div { {notify.name.clone()} }
+                div { class: "font-semibold", "Type:" }
+                div { {notify.kind.clone()} }
+                div { class: "font-semibold", "Enabled:" }
+                div { "{notify.enable}" }
+                div { class: "font-semibold", "To:" }
+                div { {notify.setting.to.clone()} }
+                div { class: "font-semibold", "Message:" }
+                div { {notify.setting.message.clone().unwrap_or_default()} }
+                div { class: "font-semibold", "Created:" }
+                div { {notify.create_time.clone()} }
+            }
+        }
+    }
+}
+
+#[component]
+fn ActiveNotifySection(notifies: Vec<ActiveNotify>) -> Element {
+    if notifies.is_empty() {
+        rsx! {
+            div {
+                p { "No notifications configured" }
+                Button { "Add(TODO)" }
+            }
+        }
+    } else {
+        rsx! {
+            div {
+                div { class: "flex justify-end mb-2",
+                    Button { "Add(TODO)" }
+                }
+                div { class: "grid grid-cols-1 gap-4",
+                    for notify in notifies {
+                        ActiveNotifyCard { notify: notify.clone() }
+                    }
+                }
+            }
         }
     }
 }
