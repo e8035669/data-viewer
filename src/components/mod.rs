@@ -20,3 +20,4 @@ pub mod toast;
 pub mod select;
 pub mod radio_group;
 pub mod textarea;
+pub mod switch;

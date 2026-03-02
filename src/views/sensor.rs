@@ -10,6 +10,7 @@ use crate::components::dropdown_menu::{
 };
 use crate::components::input::Input;
 use crate::components::label::Label;
+use crate::components::switch::{Switch, SwitchThumb};
 use crate::components::textarea::Textarea;
 use anyhow::{anyhow, Error, Result};
 use async_std::task::sleep;
@@ -703,11 +704,58 @@ pub fn DeviceAttrPanelImpl(
         }
     };
 
+    let save_device_info = move |_| async move {
+        let edit_device = EditDevice {
+            name: device_info().name.clone(),
+            kind: device().kind.clone(),
+            desc: device_info().desc.clone(),
+            ..Default::default()
+        };
+        let client = Client::new();
+        let url = endpoint().device(&device().id);
+        let toastapi = use_toast();
+
+        let json_text = serde_json::to_string(&edit_device);
+        tracing::debug!("{:?}", json_text);
+        let result = client
+            .put(url)
+            .header("CK", &project().project_key)
+            .json(&edit_device)
+            .send()
+            .await;
+
+        match result {
+            Ok(data) => {
+                let text = data
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Error parse String".to_string());
+                toastapi.success(
+                    "Updated".to_string(),
+                    ToastOptions::new()
+                        .description(text)
+                        .duration(Duration::from_secs(5)),
+                );
+                project_meta.restart();
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+    };
+
     rsx! {
         div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
             h1 { class: "text-2xl font-bold", "Device Info" }
-            Button { variant: if is_device_dirty() { ButtonVariant::Primary } else { ButtonVariant::Secondary },
-                "Save(TODO)"
+            Button {
+                variant: if is_device_dirty() { ButtonVariant::Primary } else { ButtonVariant::Secondary },
+                onclick: save_device_info,
+                "Save"
             }
         }
         div { class: "grid grid-cols-[auto_auto] gap-2 w-full",
@@ -1030,28 +1078,30 @@ pub fn MonitorPanel(
             .await
     });
 
-    let active_setting = use_resource(move || async move {
+    let active_setting: Resource<Result<ActiveDevice>> = use_resource(move || async move {
         let client = reqwest::Client::new();
         let url = endpoint().active_setting(&device().id);
-        client
+        let ret = client
             .get(url)
             .header("CK", project().project_key.as_str())
             .send()
             .await?
             .json::<ActiveDevice>()
-            .await
+            .await?;
+        Ok(ret)
     });
 
-    let active_notify = use_resource(move || async move {
+    let active_notify: Resource<Result<Vec<ActiveNotify>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
         let url = endpoint().active_notify(&device().id);
-        client
+        let ret = client
             .get(url)
             .header("CK", project().project_key.as_str())
             .send()
             .await?
             .json::<Vec<ActiveNotify>>()
-            .await
+            .await?;
+        Ok(ret)
     });
 
     let active_rsx = if let Some(active_status) = &*active_status.read() {
@@ -1080,23 +1130,16 @@ pub fn MonitorPanel(
         }
     };
 
-    let active_setting_rsx = if let Some(active_setting) = &*active_setting.read() {
-        match active_setting {
+    let active_setting_rsx = if let Some(setting) = &*active_setting.read() {
+        match setting {
             Ok(setting) => {
                 rsx! {
-                    div { class: "grid grid-cols-[auto_auto] gap-2",
-                        div { "Device ID:" }
-                        div { {setting.device_id.clone()} }
-                        div { "Enabled:" }
-                        div { "{setting.enable}" }
-                        div { "Period:" }
-                        div { {setting.period.clone()} }
-                        div { "Min Uploads:" }
-                        div { {setting.min_uploads.map(|v| v.to_string()).unwrap_or_default()} }
-                        div { "Max Uploads:" }
-                        div { {setting.max_uploads.map(|v| v.to_string()).unwrap_or_default()} }
-                        div { "Created:" }
-                        div { "{setting.create_time.unwrap_or_default()}" }
+                    ActiveSettingSection {
+                        project,
+                        endpoint,
+                        device,
+                        setting: setting.clone(),
+                        active_setting,
                     }
                 }
             }
@@ -1131,10 +1174,6 @@ pub fn MonitorPanel(
         }
         {active_rsx}
 
-        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
-            h1 { class: "text-2xl font-bold", "Active Setting" }
-            Button { "Save(TODO)" }
-        }
         {active_setting_rsx}
 
         div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
@@ -1194,6 +1233,137 @@ fn ActiveNotifySection(notifies: Vec<ActiveNotify>) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+#[component]
+fn ActiveSettingSection(
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    device: ReadSignal<Device>,
+    setting: ReadSignal<ActiveDevice>,
+    active_setting: Resource<Result<ActiveDevice, Error>>,
+) -> Element {
+    let mut setting_clone = use_signal(move || setting().clone());
+    let is_dirty = use_memo(move || setting() != setting_clone());
+    let is_dirty_varient = use_memo(move || {
+        if is_dirty() {
+            ButtonVariant::Primary
+        } else {
+            ButtonVariant::Secondary
+        }
+    });
+
+    let save_active_setting = move |_| async move {
+        let toastapi = use_toast();
+        let client = reqwest::Client::new();
+        let url = endpoint().active_setting(&device().id);
+        let edit_active = ActiveDevice {
+            device_id: device().id.clone(),
+            enable: setting_clone().enable,
+            period: setting_clone().period.clone(),
+            min_uploads: setting_clone().min_uploads.clone(),
+            max_uploads: setting_clone().max_uploads.clone(),
+            create_time: setting().create_time,
+        };
+        let result = client
+            .post(url)
+            .header("CK", project().project_key.as_str())
+            .json(&edit_active)
+            .send()
+            .await;
+
+        match result {
+            Ok(data) => {
+                let text = data
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Error parse String".to_string());
+                toastapi.success(
+                    "Updated".to_string(),
+                    ToastOptions::new()
+                        .description(text)
+                        .duration(Duration::from_secs(5)),
+                );
+                active_setting.restart();
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+    };
+
+    rsx! {
+        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
+            h1 { class: "text-2xl font-bold", "Active Setting" }
+            Button { variant: is_dirty_varient(), onclick: save_active_setting, "Save(TODO)" }
+        }
+
+        div { class: "grid grid-cols-[auto_auto] gap-2",
+            div { "Device ID:" }
+            div { {setting().device_id.clone()} }
+            div { "Enabled:" }
+            div { class: "flex items-center gap-4",
+                Switch {
+                    checked: setting_clone().enable,
+                    on_checked_change: move |c| setting_clone.write().enable = c,
+                    SwitchThumb {}
+                }
+                "{setting_clone().enable}"
+            }
+            div { "Period:" }
+            div {
+                Input {
+                    value: setting_clone().period,
+                    onchange: move |e: FormEvent| setting_clone.write().period = e.value(),
+                }
+            }
+            div { "Min Uploads:" }
+            div {
+                Input {
+                    value: setting_clone().min_uploads.map(|v| v.to_string()),
+                    onchange: move |e: FormEvent| {
+                        if e.value().is_empty() {
+                            setting_clone.write().min_uploads = None;
+                        } else {
+                            let value = e.value()
+                            .parse::<i32>();
+                            if let Ok(value) = value {
+                                setting_clone.write().min_uploads = Some(value);
+                            } else {
+                                setting_clone.write();
+                            }
+                        }
+                    },
+                }
+            }
+            div { "Max Uploads:" }
+            div {
+                Input {
+                    value: setting_clone().max_uploads.map(|v| v.to_string()),
+                    onchange: move |e: FormEvent| {
+                        if e.value().is_empty() {
+                            setting_clone.write().max_uploads = None;
+                        } else {
+                            let value = e.value()
+                            .parse::<i32>();
+                            if let Ok(value) = value {
+                                setting_clone.write().max_uploads = Some(value);
+                            } else {
+                                setting_clone.write();
+                            }
+                        }
+                    },
+                }
+            }
+            div { "Created:" }
+            div { "{setting().create_time.unwrap_or_default()}" }
         }
     }
 }
