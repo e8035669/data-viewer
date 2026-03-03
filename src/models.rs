@@ -1,6 +1,6 @@
+use core::fmt;
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
-use core::fmt;
 use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -129,7 +129,6 @@ pub struct ActiveInfo {
     pub create_time: String,
 }
 
-
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
 
 pub struct ActiveDevice {
@@ -243,6 +242,13 @@ impl EndpointTrait for Endpoint {
             Endpoint::Edge(endpoint) => endpoint.active(device_id),
         }
     }
+
+    fn active_notify_delete(&self, device_id: &str, notify_id: i32) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.active_notify_delete(device_id, notify_id),
+            Endpoint::Edge(endpoint) => endpoint.active_notify_delete(device_id, notify_id),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -253,6 +259,7 @@ pub struct GeneralEndpoint {
 pub trait EndpointTrait {
     fn active_notify(&self, device_id: &str) -> String;
     fn active_setting(&self, device_id: &str) -> String;
+    fn active_notify_delete(&self, device_id: &str, notify_id: i32) -> String;
     fn active(&self, device_id: &str) -> String;
     fn sensor(&self, device_id: &str, sensor_id: &str) -> String;
     fn metadata(&self) -> String;
@@ -304,6 +311,13 @@ impl EndpointTrait for GeneralEndpoint {
     fn active_notify(&self, device_id: &str) -> String {
         format!("{}/device/{device_id}/active/notify", self.base_url)
     }
+
+    fn active_notify_delete(&self, device_id: &str, notify_id: i32) -> String {
+        format!(
+            "{}/device/{device_id}/active/notify/{notify_id}",
+            self.base_url
+        )
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -353,6 +367,13 @@ impl EndpointTrait for EdgeEndpoint {
 
     fn active(&self, device_id: &str) -> String {
         format!("{}/device/{device_id}/active", self.base_url)
+    }
+
+    fn active_notify_delete(&self, device_id: &str, notify_id: i32) -> String {
+        format!(
+            "{}/device/{device_id}/active/notify/{notify_id}",
+            self.base_url
+        )
     }
 }
 

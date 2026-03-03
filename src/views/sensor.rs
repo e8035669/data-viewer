@@ -5,6 +5,7 @@ use crate::components::button::{Button, ButtonVariant};
 use crate::components::card::{
     Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 };
+use crate::components::dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle};
 use crate::components::dropdown_menu::{
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 };
@@ -23,8 +24,9 @@ use dioxus_primitives::toast::{use_toast, ToastOptions};
 use reqwest::Client;
 
 use crate::models::{
-    ActiveDevice, ActiveInfo, ActiveNotify, Attribute, Device, EditDevice, EditSensor, Endpoint,
-    EndpointTrait, Endpoints, Project, Projects, RawData, Sensor, SensorType, SensorWithData,
+    ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute, Device, EditDevice,
+    EditSensor, Endpoint, EndpointTrait, Endpoints, Project, Projects, RawData, Sensor, SensorType,
+    SensorWithData,
 };
 
 #[component]
@@ -982,7 +984,7 @@ pub fn SensorAttrPanelImpl(
                     "Updated".to_string(),
                     ToastOptions::new()
                         .description(text)
-                        .duration(Duration::from_secs(5)),
+                        .duration(Duration::from_secs(10)),
                 );
                 project_meta.restart();
             }
@@ -1153,10 +1155,16 @@ pub fn MonitorPanel(
         }
     };
 
-    let active_notify_rsx = if let Some(active_notify) = &*active_notify.read() {
-        match active_notify {
+    let active_notify_rsx = if let Some(notifies) = &*active_notify.read() {
+        match notifies {
             Ok(notifies) => rsx! {
-                ActiveNotifySection { notifies: notifies.clone() }
+                ActiveNotifySection {
+                    project,
+                    endpoint,
+                    device,
+                    notifies: notifies.clone(),
+                    active_notify,
+                }
             },
             Err(_) => rsx! {
                 p { "Load Error" }
@@ -1185,51 +1193,305 @@ pub fn MonitorPanel(
 }
 
 #[component]
-fn ActiveNotifyCard(notify: ActiveNotify) -> Element {
+fn ActiveNotifyCard(
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    device: ReadSignal<Device>,
+    notify: ReadSignal<ActiveNotify>,
+    active_notify: Resource<Result<Vec<ActiveNotify>>>,
+) -> Element {
+    let mut notify_edit = use_signal(move || notify().clone());
+    let is_dirty_varient = use_memo(move || {
+        if notify_edit() == notify() {
+            ButtonVariant::Secondary
+        } else {
+            ButtonVariant::Primary
+        }
+    });
+    let mut delete_dialog_open = use_signal(|| false);
+
+    let on_save_click = move |_| async move {
+        let client = reqwest::Client::new();
+        let edit_notify = notify_edit();
+        let toastapi = use_toast();
+
+        if edit_notify.setting.to.is_empty() {
+            toastapi.error(
+                "'To' email cannot be empty".to_string(),
+                ToastOptions::new().duration(Duration::from_secs(10)),
+            );
+            return;
+        }
+
+        let delete_url = endpoint().active_notify_delete(&device().id, notify_edit().id);
+        let ret1 = client
+            .delete(delete_url)
+            .header("CK", project().project_key.as_str())
+            .send()
+            .await;
+
+        match ret1 {
+            Ok(data) => {
+                let text = data
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Error parse String".to_string());
+
+                toastapi.success(
+                    "Delete".to_string(),
+                    ToastOptions::new()
+                        .description(text)
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+
+        let url = endpoint().active_notify(&device().id);
+        let result = client
+            .post(url)
+            .header("CK", project().project_key.as_str())
+            .json(&edit_notify)
+            .send()
+            .await;
+
+        match result {
+            Ok(data) => {
+                let text = data
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Error parse String".to_string());
+                toastapi.success(
+                    "Updated".to_string(),
+                    ToastOptions::new()
+                        .description(text)
+                        .duration(Duration::from_secs(5)),
+                );
+                active_notify.restart();
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+    };
+
+    let on_delete_click = move |_| async move {
+        delete_dialog_open.set(false);
+
+        let client = reqwest::Client::new();
+        let toastapi = use_toast();
+        let delete_url = endpoint().active_notify_delete(&device().id, notify().id);
+        let ret1 = client
+            .delete(delete_url)
+            .header("CK", project().project_key.as_str())
+            .send()
+            .await;
+
+        match ret1 {
+            Ok(data) => {
+                let text = data
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Error parse String".to_string());
+
+                toastapi.success(
+                    "Delete".to_string(),
+                    ToastOptions::new()
+                        .description(text)
+                        .duration(Duration::from_secs(5)),
+                );
+                active_notify.restart();
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+    };
+
+    let delete_dialog = rsx! {
+        DialogRoot {
+            open: delete_dialog_open(),
+            on_open_change: move |v| delete_dialog_open.set(v),
+            DialogContent {
+                DialogTitle { "Delete Confirm" }
+                DialogDescription {
+                    div { class: "flex flex-col gap-4",
+                        "Delete id {notify().id}"
+                        div { class: "flex flex-row-reverse gap-4",
+                            Button {
+                                variant: ButtonVariant::Destructive,
+                                onclick: on_delete_click,
+                                "Yes"
+                            }
+                            Button {
+                                variant: ButtonVariant::Primary,
+                                onclick: move |_| delete_dialog_open.set(false),
+                                "NO"
+                            }
+                        
+                        }
+                    
+                    }
+                }
+            }
+        }
+    };
+
     rsx! {
+        {delete_dialog}
         div { class: "border rounded-lg p-4 relative",
             div { class: "absolute top-2 right-2 flex space-x-2",
-                Button { variant: ButtonVariant::Ghost, "Edit(TODO)" }
-                Button { variant: ButtonVariant::Ghost, "Delete(TODO)" }
+                Button { variant: is_dirty_varient(), onclick: on_save_click, "Save" }
+                Button {
+                    variant: ButtonVariant::Destructive,
+                    onclick: move |_| delete_dialog_open.set(true),
+                    "Delete"
+                }
             }
             div { class: "grid grid-cols-[auto_auto] gap-2",
                 div { class: "font-semibold", "ID:" }
-                div { {notify.id.to_string()} }
+                div { {notify().id.to_string()} }
                 div { class: "font-semibold", "Name:" }
-                div { {notify.name.clone()} }
+                div {
+                    Input {
+                        value: notify_edit().name,
+                        oninput: move |e: FormEvent| notify_edit.write().name = e.value(),
+                    }
+                }
                 div { class: "font-semibold", "Type:" }
-                div { {notify.kind.clone()} }
+                div {
+                    Input {
+                        value: notify_edit().kind,
+                        oninput: move |e: FormEvent| notify_edit.write().kind = e.value(),
+                    }
+                }
                 div { class: "font-semibold", "Enabled:" }
-                div { "{notify.enable}" }
+                div { class: "flex items-center gap-4",
+                    Switch {
+                        checked: notify_edit().enable,
+                        on_checked_change: move |v| notify_edit.write().enable = v,
+                        SwitchThumb {}
+                    }
+                    "{notify_edit().enable}"
+                }
                 div { class: "font-semibold", "To:" }
-                div { {notify.setting.to.clone()} }
+                div {
+                    Textarea {
+                        value: notify_edit().setting.to,
+                        oninput: move |e: FormEvent| notify_edit.write().setting.to = e.value(),
+                    }
+                }
                 div { class: "font-semibold", "Message:" }
-                div { {notify.setting.message.clone().unwrap_or_default()} }
+                div {
+                    Textarea {
+                        value: notify_edit().setting.message,
+                        oninput: move |e: FormEvent| notify_edit.write().setting.message = Some(e.value()),
+                    }
+                }
                 div { class: "font-semibold", "Created:" }
-                div { {notify.create_time.clone()} }
+                div { {notify().create_time} }
             }
         }
     }
 }
 
 #[component]
-fn ActiveNotifySection(notifies: Vec<ActiveNotify>) -> Element {
+fn ActiveNotifySection(
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    device: ReadSignal<Device>,
+    notifies: Vec<ActiveNotify>,
+    active_notify: Resource<Result<Vec<ActiveNotify>>>,
+) -> Element {
+    let on_add_button = move |_| async move {
+        let toastapi = use_toast();
+        let client = reqwest::Client::new();
+        let new_notify = ActiveNotify {
+            id: 1,
+            device_id: device().id,
+            enable: true,
+            name: "notify".to_string(),
+            kind: "MAIL".to_string(),
+            setting: ActiveNotifySetting {
+                to: "somebody@some.example".to_string(),
+                message: Some(String::new()),
+            },
+            create_time: String::new(),
+        };
+
+        let url = endpoint().active_notify(&device().id);
+        let result = client
+            .post(url)
+            .header("CK", project().project_key.as_str())
+            .json(&new_notify)
+            .send()
+            .await;
+
+        match result {
+            Ok(data) => {
+                let text = data
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Error parse String".to_string());
+                toastapi.success(
+                    "Updated".to_string(),
+                    ToastOptions::new()
+                        .description(text)
+                        .duration(Duration::from_secs(5)),
+                );
+                active_notify.restart();
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+    };
+
     if notifies.is_empty() {
         rsx! {
             div {
                 p { "No notifications configured" }
-                Button { "Add(TODO)" }
+                Button { onclick: on_add_button, "Add" }
             }
         }
     } else {
         rsx! {
             div {
                 div { class: "flex justify-end mb-2",
-                    Button { "Add(TODO)" }
+                    Button { onclick: on_add_button, "Add" }
                 }
                 div { class: "grid grid-cols-1 gap-4",
                     for notify in notifies {
-                        ActiveNotifyCard { notify: notify.clone() }
+                        ActiveNotifyCard {
+                            key: "{notify.id}",
+                            project,
+                            endpoint,
+                            device,
+                            notify: notify.clone(),
+                            active_notify,
+                        }
                     }
                 }
             }
