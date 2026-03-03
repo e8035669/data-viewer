@@ -1,9 +1,10 @@
 use std::{collections::HashMap, time::Duration};
 
+use crate::components::radio_group::{RadioGroup, RadioItem};
+use crate::models::{Project, Projects};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::toast::{use_toast, ToastOptions};
-use crate::models::{Project, Projects};
 
 use crate::{
     components::{
@@ -19,8 +20,6 @@ use crate::{
     },
     models::Endpoints,
 };
-
-
 
 #[derive(Store)]
 pub struct AddProjectCtx {
@@ -102,12 +101,9 @@ pub fn ProjectsView() -> Element {
     };
 
     let endpoint_copy = endpoints();
-    let endpoint_menus = endpoint_copy.keys().enumerate().map(|(i, k)| {
+    let endpoint_items = endpoint_copy.keys().enumerate().map(|(i, k)| {
         rsx! {
-            SelectOption::<String> { index: i, value: "{k}",
-                "{k}"
-                SelectItemIndicator {}
-            }
+            RadioItem { index: i, value: "{k}", "{k}" }
         }
     });
 
@@ -141,18 +137,19 @@ pub fn ProjectsView() -> Element {
                         }
 
                         Label { html_for: "endpoint_key", "Endpoint Key" }
-                        Select::<String> {
-                            id: "endpoint_key",
-                            placeholder: "Select an endpoint...",
-                            on_value_change: move |v: Option<String>| new_info.endpoint_key().set(v.unwrap_or_default()),
-                            SelectTrigger { class: "w-48", aria_label: "Select Trigger", SelectValue {} }
-
-                            SelectList {
-                                SelectGroup { {endpoint_menus} }
+                        div { id: "endpoint_key",
+                            if endpoints().is_empty() {
+                                p { "Endpoint is empty, Add endpoint first." }
+                            } else {
+                                RadioGroup {
+                                    value: new_info.endpoint_key()(),
+                                    on_value_change: move |v: String| new_info.endpoint_key().set(v),
+                                    {endpoint_items}
+                                }
                             }
                         }
 
-                        Button { r#type: "submit", onclick: on_new_submit, "Submit" }
+                        Button { onclick: on_new_submit, "Submit" }
                     }
                 }
             }

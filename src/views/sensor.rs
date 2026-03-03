@@ -1302,7 +1302,7 @@ fn ActiveSettingSection(
     rsx! {
         div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
             h1 { class: "text-2xl font-bold", "Active Setting" }
-            Button { variant: is_dirty_varient(), onclick: save_active_setting, "Save(TODO)" }
+            Button { variant: is_dirty_varient(), onclick: save_active_setting, "Save" }
         }
 
         div { class: "grid grid-cols-[auto_auto] gap-2",
