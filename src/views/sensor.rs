@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::Duration;
 
 use crate::components::button::{Button, ButtonVariant};
@@ -6,13 +7,10 @@ use crate::components::card::{
     Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 };
 use crate::components::dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle};
-use crate::components::dropdown_menu::{
-    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-};
 use crate::components::input::Input;
-use crate::components::label::Label;
 use crate::components::switch::{Switch, SwitchThumb};
 use crate::components::textarea::Textarea;
+use crate::views::endpoints;
 use anyhow::{anyhow, Error, Result};
 use async_std::task::sleep;
 use base64::prelude::*;
@@ -21,7 +19,10 @@ use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons;
 use dioxus_free_icons::Icon;
 use dioxus_primitives::toast::{use_toast, ToastOptions};
-use reqwest::Client;
+use reqwest::{Client, Url};
+use time::format_description::well_known::Iso8601;
+use time::macros::offset;
+use time::{Date, OffsetDateTime, UtcOffset};
 
 use crate::models::{
     ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute, Device, EditDevice,
@@ -163,6 +164,7 @@ pub enum ViewStatus {
     DeviceAttr,
     Sensor,
     SensorAttr,
+    SensorHistory,
 }
 
 #[derive(Debug, Clone, Store, PartialEq)]
@@ -201,6 +203,12 @@ impl<Lens> Store<PageContext, Lens> {
         self.selected_device()
             .set(Some(selected_device.to_string()));
         self.view_status().set(ViewStatus::DeviceAttr);
+    }
+
+    fn view_sensor_history(&mut self, selected_sensor: &str) {
+        self.selected_sensor()
+            .set(Some(selected_sensor.to_string()));
+        self.view_status().set(ViewStatus::SensorHistory);
     }
 }
 
@@ -305,6 +313,17 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
                                 project_meta,
                             }
                         },
+                        ViewStatus::SensorHistory => rsx! {
+                            SensorHistoryPanel {
+                                project,
+                                endpoint,
+                                device,
+                                sensor,
+                                ctx,
+                                project_meta,
+                            }
+                        },
+
                     }
                 },
                 Err(_) => rsx! {
@@ -494,12 +513,14 @@ pub fn SensorView3(
     });
 
     rsx! {
-        Button {
-            onclick: move |_| {
-                resource.restart();
-                timer.set(10);
-            },
-            "Refresh: {timer()}"
+        div { class: "flex w-full justify-end",
+            Button {
+                onclick: move |_| {
+                    resource.restart();
+                    timer.set(10);
+                },
+                "Refresh: {timer()}"
+            }
         }
         div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4",
             if let Some(response) = &*resource.read() {
@@ -567,6 +588,7 @@ pub fn SensorPanel3(
     let sensor_id = use_memo(move || sensor().id.clone());
 
     let btnclick = move |_| ctx.view_sensor_attr(&sensor_id());
+    let history_click = move |_| ctx.view_sensor_history(&sensor_id());
 
     rsx! {
         Card {
@@ -576,6 +598,9 @@ pub fn SensorPanel3(
                 CardAction {
                     Button { variant: ButtonVariant::Ghost, onclick: btnclick,
                         Icon { icon: fa_solid_icons::FaSliders }
+                    }
+                    Button { variant: ButtonVariant::Ghost, onclick: history_click,
+                        Icon { icon: fa_solid_icons::FaClockRotateLeft }
                     }
                 }
             }
@@ -1507,7 +1532,7 @@ fn ActiveSettingSection(
     setting: ReadSignal<ActiveDevice>,
     active_setting: Resource<Result<ActiveDevice, Error>>,
 ) -> Element {
-    let mut setting_clone = use_signal(move || setting().clone());
+    let mut setting_clone = use_signal(|| setting().clone());
     let is_dirty = use_memo(move || setting() != setting_clone());
     let is_dirty_varient = use_memo(move || {
         if is_dirty() {
@@ -1527,6 +1552,7 @@ fn ActiveSettingSection(
             period: setting_clone().period.clone(),
             min_uploads: setting_clone().min_uploads.clone(),
             max_uploads: setting_clone().max_uploads.clone(),
+            sensor: setting_clone().sensor.clone(),
             create_time: setting().create_time,
         };
         let result = client
@@ -1624,8 +1650,188 @@ fn ActiveSettingSection(
                     },
                 }
             }
+            div { "Sensor" }
+            div {
+                Input {
+                    value: setting_clone().sensor,
+                    onchange: move |e: FormEvent| {
+                        if e.value().is_empty() {
+                            setting_clone.write().sensor = None;
+                        } else {
+                            setting_clone.write().sensor = Some(e.value());
+                        }
+                    },
+                }
+            }
             div { "Created:" }
             div { "{setting().create_time.unwrap_or_default()}" }
+        }
+    }
+}
+
+#[component]
+pub fn SensorHistoryPanel(
+    project: Memo<Option<Project>>,
+    endpoint: Memo<Option<Endpoint>>,
+    device: Memo<Option<Device>>,
+    sensor: Memo<Option<Sensor>>,
+    ctx: Store<PageContext>,
+    project_meta: Resource<Result<Vec<Device>>>,
+) -> Element {
+    let panel = if project().is_some()
+        && endpoint().is_some()
+        && device().is_some()
+        && sensor().is_some()
+    {
+        let project = project().unwrap();
+        let endpoint = endpoint().unwrap();
+        let device = device().unwrap();
+        let sensor = sensor().unwrap();
+
+        rsx! {
+            SensorHistoryPanelImpl {
+                project,
+                endpoint,
+                device,
+                sensor,
+                ctx,
+                project_meta,
+            }
+        }
+    } else {
+        rsx! {
+            p { "Error" }
+        }
+    };
+
+    rsx! {
+        SensorHeader {
+            project,
+            endpoint,
+            device,
+            sensor,
+            ctx,
+        }
+
+        {panel}
+    }
+}
+
+#[component]
+pub fn SensorHistoryPanelImpl(
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    device: ReadSignal<Device>,
+    sensor: ReadSignal<Sensor>,
+    ctx: Store<PageContext>,
+    project_meta: Resource<Result<Vec<Device>>>,
+) -> Element {
+    let today = use_signal(|| {
+        OffsetDateTime::now_local()
+            .unwrap_or_else(|_| OffsetDateTime::now_utc())
+            .date()
+    });
+    let mut selected_date = use_signal(|| today().clone());
+
+    let now = OffsetDateTime::now_utc();
+    let now_str = now.format(&Iso8601::DATE_TIME_OFFSET).unwrap();
+
+    let mut raw_datas: Resource<Result<Vec<RawData>>> = use_resource(move || async move {
+        let client = reqwest::Client::new();
+        let url = endpoint().sensor_rawdata(&device().id, &sensor().id);
+        let start =
+            OffsetDateTime::new_in_offset(selected_date(), time::Time::MIDNIGHT, offset!(+8));
+        let end = OffsetDateTime::new_in_offset(selected_date(), time::Time::MAX, offset!(+8));
+        let start_str = start.format(&Iso8601::DATE_TIME_OFFSET)?;
+        let end_str = end.format(&Iso8601::DATE_TIME_OFFSET)?;
+        let mut url = Url::from_str(&url)?;
+        url.query_pairs_mut()
+            .append_pair("start", &start_str)
+            .append_pair("end", &end_str);
+        let ret = client
+            .get(url)
+            .header("CK", project().project_key.as_str())
+            .send()
+            .await?
+            .json::<Vec<RawData>>()
+            .await?;
+        Ok(ret)
+    });
+
+    let add_one_day = move |_| {
+        selected_date.set(selected_date().saturating_add(time::Duration::days(1)));
+        raw_datas.restart();
+    };
+
+    let minus_one_day = move |_| {
+        selected_date.set(selected_date().saturating_sub(time::Duration::days(1)));
+        raw_datas.restart();
+    };
+
+    rsx! {
+        p { "🚧施工中🚧" }
+
+        div { class: "flex justify-center gap-4",
+            Button { onclick: minus_one_day,
+                Icon { icon: fa_solid_icons::FaChevronLeft }
+            }
+            Input {
+                r#type: "date",
+                oninput: move |e: FormEvent| {
+                    let d = Date::parse(e.value().as_str(), &Iso8601::DATE);
+                    if let Ok(d) = d {
+                        selected_date.set(d);
+                    } else {
+                        selected_date.set(today());
+                    }
+                },
+                value: "{selected_date()}",
+            }
+            Button { onclick: add_one_day,
+                Icon { icon: fa_solid_icons::FaChevronRight }
+            }
+        }
+
+        // 顯示raw_datas的資料
+        if let Some(response) = &*raw_datas.read() {
+            match response {
+                Ok(datas) => rsx! {
+                    if datas.is_empty() {
+                        div { class: "text-center py-8 text-gray-500", "No data available for this date" }
+                    } else {
+                        div { class: "mt-8",
+                            h2 { class: "text-xl font-bold mb-4", "Raw Data Records" }
+                            div { class: "overflow-x-auto",
+                                table { class: "w-full border-collapse border border-gray-300",
+                                    thead {
+                                        tr { class: "bg-gray-100",
+                                            th { class: "border border-gray-300 p-2 text-left", "Time" }
+                                            th { class: "border border-gray-300 p-2 text-left", "Value" }
+                                        }
+                                    }
+                                    tbody {
+                                        for data in datas {
+                                            tr { class: "hover:bg-gray-50",
+                                                td { class: "border border-gray-300 p-2 font-mono text-sm",
+                                                    "{data.time.clone().unwrap_or_default()}"
+                                                }
+                                                td { class: "border border-gray-300 p-2 font-mono text-sm",
+                                                    "{data.value.join(\", \")}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                Err(err) => rsx! {
+                    div { class: "text-red-500 mt-4", "Error loading data: {err}" }
+                },
+            }
+        } else {
+            div { class: "text-gray-500 mt-4", "Loading data..." }
         }
     }
 }

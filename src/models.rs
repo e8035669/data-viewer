@@ -140,6 +140,8 @@ pub struct ActiveDevice {
     pub min_uploads: Option<i32>,
     #[serde(rename = "maxUploads")]
     pub max_uploads: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sensor: Option<String>,
     #[serde(rename = "createTime")]
     pub create_time: Option<u64>,
 }
@@ -249,6 +251,13 @@ impl EndpointTrait for Endpoint {
             Endpoint::Edge(endpoint) => endpoint.active_notify_delete(device_id, notify_id),
         }
     }
+
+    fn sensor_rawdata(&self, device_id: &str, sensor_id: &str) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.sensor_rawdata(device_id, sensor_id),
+            Endpoint::Edge(endpoint) => endpoint.sensor_rawdata(device_id, sensor_id),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -257,6 +266,7 @@ pub struct GeneralEndpoint {
 }
 
 pub trait EndpointTrait {
+    fn sensor_rawdata(&self, device_id: &str, sensor_id: &str) -> String;
     fn active_notify(&self, device_id: &str) -> String;
     fn active_setting(&self, device_id: &str) -> String;
     fn active_notify_delete(&self, device_id: &str, notify_id: i32) -> String;
@@ -277,6 +287,14 @@ impl EndpointTrait for GeneralEndpoint {
     fn rawdata(&self, device_id: &str) -> String {
         format!("{}/device/{device_id}/rawdata", self.base_url)
     }
+
+    fn sensor_rawdata(&self, device_id: &str, sensor_id: &str) -> String {
+        format!(
+            "{}/device/{device_id}/sensor/{sensor_id}/rawdata",
+            self.base_url
+        )
+    }
+
     fn snapshot(&self, device_id: &str, sensor_id: &str, snapshot_id: &str) -> String {
         format!(
             "{}/device/{device_id}/sensor/{sensor_id}/snapshot/{snapshot_id}",
@@ -336,6 +354,13 @@ impl EndpointTrait for EdgeEndpoint {
 
     fn rawdata(&self, device_id: &str) -> String {
         format!("{}/device/{device_id}/rawdata", self.base_url)
+    }
+
+    fn sensor_rawdata(&self, device_id: &str, sensor_id: &str) -> String {
+        format!(
+            "{}/device/{device_id}/sensor/{sensor_id}/rawdata",
+            self.base_url
+        )
     }
 
     fn snapshot(&self, device_id: &str, sensor_id: &str, snapshot_id: &str) -> String {
