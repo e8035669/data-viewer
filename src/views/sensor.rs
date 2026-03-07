@@ -1773,10 +1773,15 @@ pub fn SensorHistoryPanelImpl(
             .date()
     });
 
+    let offsets = vec![offset!(+8), offset!(+0)];
+
+    let mut use_utc = use_signal(|| false);
+    let use_offset = use_memo(move || if use_utc() { offsets[1] } else { offsets[0] });
+
     let format = format_description!("[hour]:[minute]");
 
     let mut selected_datetime =
-        use_signal(|| OffsetDateTime::new_in_offset(today(), time::Time::MIDNIGHT, offset!(+8)));
+        use_signal(|| OffsetDateTime::new_in_offset(today(), time::Time::MIDNIGHT, offset!(+0)));
 
     let selected_date = use_memo(move || selected_datetime().date());
     let selected_time = use_memo(move || {
@@ -1789,15 +1794,21 @@ pub fn SensorHistoryPanelImpl(
     let raw_datas: Resource<Result<Vec<GetRawData>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
         let url = endpoint().sensor_rawdata(&device().id, &sensor().id);
-        let start = selected_datetime();
-        let end =
-            OffsetDateTime::new_in_offset(selected_datetime().date(), time::Time::MAX, offset!(+8));
+        let start = selected_datetime().replace_offset(use_offset());
+        let end = OffsetDateTime::new_in_offset(
+            selected_datetime().date(),
+            time::Time::MAX,
+            use_offset(),
+        );
         let start_str = start.format(&Iso8601::DATE_TIME_OFFSET)?;
         let end_str = end.format(&Iso8601::DATE_TIME_OFFSET)?;
         let mut url = Url::from_str(&url)?;
         url.query_pairs_mut()
             .append_pair("start", &start_str)
             .append_pair("end", &end_str);
+        if !use_utc() {
+            url.query_pairs_mut().append_pair("utcOffset", "8");
+        }
         let ret = client
             .get(url)
             .header("CK", project().project_key.as_str())
@@ -1874,7 +1885,17 @@ pub fn SensorHistoryPanelImpl(
     rsx! {
         h2 { class: "text-xl font-bold mb-4", "Raw Data Records" }
 
-        div { class: "flex justify-center gap-4 flex-wrap",
+        div { class: "flex justify-center gap-4 flex-wrap items-center",
+            div { class: "flex justify-center gap-4",
+                p { "GMT+8" }
+                Switch {
+                    checked: use_utc(),
+                    on_checked_change: move |b| use_utc.set(b),
+                    SwitchThumb {}
+                }
+                p { "UTC" }
+            }
+
             div { class: "flex justify-center gap-4",
                 Button { onclick: minus_one_day,
                     Icon { icon: fa_solid_icons::FaChevronLeft }
