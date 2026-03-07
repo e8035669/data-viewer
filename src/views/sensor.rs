@@ -1969,13 +1969,13 @@ pub fn SensorRawDataTable(
                 class: "grid grid-cols-1  gap-4",
                 class: if imgdata().is_some() { "md:grid-cols-2" },
                 div { class: "flex flex-col overflow-auto max-h-[60lvh]",
-                    table { class: "border-collapse border border-gray-300",
+                    table { class: "border-collapse border border-(--primary-color-7)",
                         thead {
-                            tr { class: "bg-gray-100",
-                                th { class: "border border-gray-300 p-2 text-left",
+                            tr { class: "bg-(--primary-color-5)",
+                                th { class: "border border-(--primary-color-7)  p-2 text-left text-(--secondary-color-1) ",
                                     "Time"
                                 }
-                                th { class: "border border-gray-300 p-2 text-left",
+                                th { class: "border border-(--primary-color-7) p-2 text-left text-(--secondary-color-1) ",
                                     "Value"
                                 }
                             }
@@ -1984,15 +1984,15 @@ pub fn SensorRawDataTable(
                             for (index , data) in datas().iter().enumerate() {
                                 tr {
                                     key: "{data.time.clone()}",
-                                    class: "hover:bg-gray-50 cursor-pointer",
-                                    class: if selected_index() == Some(index) { "bg-blue-100" },
+                                    class: "hover:bg-(--primary-color-5)  cursor-pointer text-(--secondary-color-1)",
+                                    class: if selected_index() == Some(index) { "bg-blue-100 dark:bg-blue-900" },
                                     onclick: move |_| {
                                         selected_index.set(Some(index));
                                     },
-                                    td { class: "border border-gray-300 p-2 font-mono text-sm",
+                                    td { class: "border border-(--primary-color-7) p-2 font-mono text-sm",
                                         "{data.time.clone()}"
                                     }
-                                    td { class: "border border-gray-300 p-2 font-mono text-sm",
+                                    td { class: "border border-(--primary-color-7) p-2 font-mono text-sm",
                                         "{data.all_value()}"
                                     }
                                 }
