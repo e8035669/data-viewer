@@ -8,6 +8,9 @@ use crate::components::card::{
 };
 use crate::components::dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle};
 use crate::components::input::Input;
+use crate::components::select::{
+    Select, SelectGroup, SelectItemIndicator, SelectList, SelectOption, SelectTrigger, SelectValue,
+};
 use crate::components::switch::{Switch, SwitchThumb};
 use crate::components::textarea::Textarea;
 use crate::views::endpoints;
@@ -21,13 +24,13 @@ use dioxus_free_icons::Icon;
 use dioxus_primitives::toast::{use_toast, ToastOptions};
 use reqwest::{Client, Url};
 use time::format_description::well_known::Iso8601;
-use time::macros::offset;
+use time::macros::{format_description, offset};
 use time::{Date, OffsetDateTime, UtcOffset};
 
 use crate::models::{
     ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute, Device, EditDevice,
-    EditSensor, Endpoint, EndpointTrait, Endpoints, Project, Projects, RawData, Sensor, SensorType,
-    SensorWithData,
+    EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project, Projects, RawData, Sensor,
+    SensorType, SensorWithData,
 };
 
 #[component]
@@ -554,7 +557,17 @@ pub fn SensorPanel3(
     sensor_data: ReadSignal<SensorWithData>,
 ) -> Element {
     let data = use_memo(move || sensor_data().data);
-    let value = use_memo(move || data().map(|d| d.value.join(" ")).unwrap_or_default());
+    let value = use_memo(move || {
+        data()
+            .map(|v| {
+                v.value
+                    .iter()
+                    .map(|e| e.clone().unwrap_or_default())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .unwrap_or_default()
+    });
 
     let sensor = use_memo(move || sensor_data().sensor);
 
@@ -562,7 +575,13 @@ pub fn SensorPanel3(
         let sensor = sensor_data().sensor;
         let data = sensor_data().data;
         let first_value = data
-            .map(|d| d.value.first().cloned().unwrap_or_default())
+            .map(|d| {
+                d.value
+                    .first()
+                    .cloned()
+                    .unwrap_or_default()
+                    .unwrap_or_default()
+            })
             .unwrap_or_default();
         if sensor.kind == SensorType::Snapshot && first_value.len() > 11 {
             let client = reqwest::Client::new();
@@ -1533,6 +1552,10 @@ fn ActiveSettingSection(
     active_setting: Resource<Result<ActiveDevice, Error>>,
 ) -> Element {
     let mut setting_clone = use_signal(|| setting().clone());
+    use_effect(move || {
+        tracing::info!("Copy original value");
+        setting_clone.set(setting());
+    });
     let is_dirty = use_memo(move || setting() != setting_clone());
     let is_dirty_varient = use_memo(move || {
         if is_dirty() {
@@ -1586,6 +1609,15 @@ fn ActiveSettingSection(
             }
         }
     };
+    let sensors = device().sensors.clone().unwrap_or_default();
+    let sensor_select = sensors.iter().enumerate().map(|(i, s)| {
+        rsx! {
+            SelectOption::<Option<String>> { index: i + 1, value: "{s.id}", text_value: "{s.id}",
+                "{s.id}"
+                SelectItemIndicator {}
+            }
+        }
+    });
 
     rsx! {
         div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
@@ -1652,15 +1684,24 @@ fn ActiveSettingSection(
             }
             div { "Sensor" }
             div {
-                Input {
-                    value: setting_clone().sensor,
-                    onchange: move |e: FormEvent| {
-                        if e.value().is_empty() {
-                            setting_clone.write().sensor = None;
-                        } else {
-                            setting_clone.write().sensor = Some(e.value());
-                        }
+                Select::<Option<String>> {
+                    value: Some(setting_clone().sensor),
+                    on_value_change: move |e: Option<Option<String>>| {
+                        setting_clone.write().sensor = e.unwrap_or_default()
                     },
+                    SelectTrigger { SelectValue {} }
+                    SelectList {
+                        SelectGroup {
+                            SelectOption::<Option<String>> {
+                                index: 0usize,
+                                value: None,
+                                text_value: "(All Sensor)",
+                                "(All Sensor)"
+                                SelectItemIndicator {}
+                            }
+                            {sensor_select}
+                        }
+                    }
                 }
             }
             div { "Created:" }
@@ -1731,17 +1772,26 @@ pub fn SensorHistoryPanelImpl(
             .unwrap_or_else(|_| OffsetDateTime::now_utc())
             .date()
     });
-    let mut selected_date = use_signal(|| today().clone());
 
-    let now = OffsetDateTime::now_utc();
-    let now_str = now.format(&Iso8601::DATE_TIME_OFFSET).unwrap();
+    let format = format_description!("[hour]:[minute]");
 
-    let mut raw_datas: Resource<Result<Vec<RawData>>> = use_resource(move || async move {
+    let mut selected_datetime =
+        use_signal(|| OffsetDateTime::new_in_offset(today(), time::Time::MIDNIGHT, offset!(+8)));
+
+    let selected_date = use_memo(move || selected_datetime().date());
+    let selected_time = use_memo(move || {
+        selected_datetime()
+            .time()
+            .format(format)
+            .unwrap_or_default()
+    });
+
+    let raw_datas: Resource<Result<Vec<GetRawData>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
         let url = endpoint().sensor_rawdata(&device().id, &sensor().id);
-        let start =
-            OffsetDateTime::new_in_offset(selected_date(), time::Time::MIDNIGHT, offset!(+8));
-        let end = OffsetDateTime::new_in_offset(selected_date(), time::Time::MAX, offset!(+8));
+        let start = selected_datetime();
+        let end =
+            OffsetDateTime::new_in_offset(selected_datetime().date(), time::Time::MAX, offset!(+8));
         let start_str = start.format(&Iso8601::DATE_TIME_OFFSET)?;
         let end_str = end.format(&Iso8601::DATE_TIME_OFFSET)?;
         let mut url = Url::from_str(&url)?;
@@ -1753,42 +1803,116 @@ pub fn SensorHistoryPanelImpl(
             .header("CK", project().project_key.as_str())
             .send()
             .await?
-            .json::<Vec<RawData>>()
+            .json::<Vec<GetRawData>>()
             .await?;
         Ok(ret)
     });
 
+    let selected_index = use_signal(|| None::<usize>);
+
+    let imgdata_res: Resource<Result<Option<String>>> = use_resource(move || async move {
+        tracing::info!("imgdata_res");
+        if sensor().kind != SensorType::Snapshot {
+            return Ok(None::<String>);
+        }
+        let mut snapshot_url: Option<String> = None;
+        if let Some(Ok(data)) = &*raw_datas.read() {
+            if let Some(selected_index) = selected_index() {
+                if selected_index < data.len() {
+                    let raw_data = &data[selected_index];
+                    if let Some(Some(first)) = raw_data.value.first() {
+                        if first.len() > 11 {
+                            snapshot_url = Some(first.clone());
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(snapshot_url) = snapshot_url {
+            let client = reqwest::Client::new();
+            let sensor_id = sensor().id;
+            let device_id = device().id;
+            let project_key = project().project_key;
+            let snapshot_id = snapshot_url[11..].to_string();
+            let url = endpoint().snapshot(&device_id, &sensor_id, &snapshot_id);
+            let img = client
+                .get(url)
+                .header("CK", project_key.as_str())
+                .send()
+                .await?
+                .bytes()
+                .await?;
+            let img_b64 = String::from("data:image/jpeg;base64,") + &BASE64_STANDARD.encode(img);
+            return Ok(Some(img_b64));
+        }
+        Ok(None)
+    });
+    let imgdata = use_memo(move || {
+        tracing::info!("imgdata");
+        if let Some(Ok(Some(data))) = &*imgdata_res.read() {
+            return Some(data.clone());
+        }
+        None
+    });
+
     let add_one_day = move |_| {
-        selected_date.set(selected_date().saturating_add(time::Duration::days(1)));
-        raw_datas.restart();
+        selected_datetime.set(selected_datetime().saturating_add(time::Duration::days(1)));
     };
 
     let minus_one_day = move |_| {
-        selected_date.set(selected_date().saturating_sub(time::Duration::days(1)));
-        raw_datas.restart();
+        selected_datetime.set(selected_datetime().saturating_sub(time::Duration::days(1)));
+    };
+
+    let add_one_hour = move |_| {
+        selected_datetime.set(selected_datetime().saturating_add(time::Duration::hours(1)));
+    };
+
+    let minus_one_hour = move |_| {
+        selected_datetime.set(selected_datetime().saturating_sub(time::Duration::hours(1)));
     };
 
     rsx! {
-        p { "🚧施工中🚧" }
+        h2 { class: "text-xl font-bold mb-4", "Raw Data Records" }
 
-        div { class: "flex justify-center gap-4",
-            Button { onclick: minus_one_day,
-                Icon { icon: fa_solid_icons::FaChevronLeft }
+        div { class: "flex justify-center gap-4 flex-wrap",
+            div { class: "flex justify-center gap-4",
+                Button { onclick: minus_one_day,
+                    Icon { icon: fa_solid_icons::FaChevronLeft }
+                }
+                Input {
+                    r#type: "date",
+                    oninput: move |e: FormEvent| {
+                        let d = Date::parse(e.value().as_str(), &Iso8601::DATE);
+                        if let Ok(d) = d {
+                            selected_datetime.set(selected_datetime().replace_date(d));
+                        } else {
+                            selected_datetime.set(selected_datetime().replace_date(today()));
+                        }
+                    },
+                    value: "{selected_date()}",
+                }
+                Button { onclick: add_one_day,
+                    Icon { icon: fa_solid_icons::FaChevronRight }
+                }
             }
-            Input {
-                r#type: "date",
-                oninput: move |e: FormEvent| {
-                    let d = Date::parse(e.value().as_str(), &Iso8601::DATE);
-                    if let Ok(d) = d {
-                        selected_date.set(d);
-                    } else {
-                        selected_date.set(today());
-                    }
-                },
-                value: "{selected_date()}",
-            }
-            Button { onclick: add_one_day,
-                Icon { icon: fa_solid_icons::FaChevronRight }
+            div { class: "flex justify-center gap-4",
+                Button { onclick: minus_one_hour,
+                    Icon { icon: fa_solid_icons::FaChevronLeft }
+                }
+                Input {
+                    r#type: "time",
+                    oninput: move |e: FormEvent| {
+                        let t = time::Time::parse(e.value().as_str(), &Iso8601::TIME);
+                        if let Ok(t) = t {
+                            selected_datetime.set(selected_datetime().replace_time(t));
+                        }
+                    },
+
+                    value: "{selected_time()}",
+                }
+                Button { onclick: add_one_hour,
+                    Icon { icon: fa_solid_icons::FaChevronRight }
+                }
             }
         }
 
@@ -1799,31 +1923,7 @@ pub fn SensorHistoryPanelImpl(
                     if datas.is_empty() {
                         div { class: "text-center py-8 text-gray-500", "No data available for this date" }
                     } else {
-                        div { class: "mt-8",
-                            h2 { class: "text-xl font-bold mb-4", "Raw Data Records" }
-                            div { class: "overflow-x-auto",
-                                table { class: "w-full border-collapse border border-gray-300",
-                                    thead {
-                                        tr { class: "bg-gray-100",
-                                            th { class: "border border-gray-300 p-2 text-left", "Time" }
-                                            th { class: "border border-gray-300 p-2 text-left", "Value" }
-                                        }
-                                    }
-                                    tbody {
-                                        for data in datas {
-                                            tr { class: "hover:bg-gray-50",
-                                                td { class: "border border-gray-300 p-2 font-mono text-sm",
-                                                    "{data.time.clone().unwrap_or_default()}"
-                                                }
-                                                td { class: "border border-gray-300 p-2 font-mono text-sm",
-                                                    "{data.value.join(\", \")}"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        SensorRawDataTable { datas: datas.clone(), selected_index, imgdata }
                     }
                 },
                 Err(err) => rsx! {
@@ -1832,6 +1932,90 @@ pub fn SensorHistoryPanelImpl(
             }
         } else {
             div { class: "text-gray-500 mt-4", "Loading data..." }
+        }
+    }
+}
+
+#[component]
+pub fn SensorRawDataTable(
+    datas: ReadSignal<Vec<GetRawData>>,
+    selected_index: Signal<Option<usize>>,
+    imgdata: ReadSignal<Option<String>>,
+) -> Element {
+    rsx! {
+        div { class: "mt-8 mb-8",
+            div {
+                class: "grid grid-cols-1  gap-4",
+                class: if imgdata().is_some() { "md:grid-cols-2" },
+                div { class: "flex flex-col overflow-auto max-h-[60lvh]",
+                    table { class: "border-collapse border border-gray-300",
+                        thead {
+                            tr { class: "bg-gray-100",
+                                th { class: "border border-gray-300 p-2 text-left",
+                                    "Time"
+                                }
+                                th { class: "border border-gray-300 p-2 text-left",
+                                    "Value"
+                                }
+                            }
+                        }
+                        tbody {
+                            for (index , data) in datas().iter().enumerate() {
+                                tr {
+                                    key: "{data.time.clone()}",
+                                    class: "hover:bg-gray-50 cursor-pointer",
+                                    class: if selected_index() == Some(index) { "bg-blue-100" },
+                                    onclick: move |_| {
+                                        selected_index.set(Some(index));
+                                    },
+                                    td { class: "border border-gray-300 p-2 font-mono text-sm",
+                                        "{data.time.clone()}"
+                                    }
+                                    td { class: "border border-gray-300 p-2 font-mono text-sm",
+                                        "{data.all_value()}"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if imgdata().is_some() {
+                    div { class: "grid justify-center items-center",
+                        img { class: "object-contain", src: imgdata() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn SensorRawDataGrid(datas: Vec<GetRawData>) -> Element {
+    rsx! {
+        div { class: "mt-8",
+            h2 { class: "text-xl font-bold mb-4", "Raw Data Records" }
+            div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4",
+                for data in &datas {
+                    div { class: "border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow",
+                        div { class: "mb-3",
+                            div { class: "text-xs font-semibold text-gray-500 uppercase mb-1",
+                                "Time"
+                            }
+                            p { class: "text-sm font-mono text-gray-900 wrap-break-word",
+                                "{data.time.clone()}"
+                            }
+                        }
+                        div {
+                            div { class: "text-xs font-semibold text-gray-500 uppercase mb-1",
+                                "Value"
+                            }
+                            p { class: "text-sm font-mono text-gray-900 wrap-break-word",
+                                "{data.all_value()}"
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

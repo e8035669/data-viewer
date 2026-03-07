@@ -82,8 +82,37 @@ pub struct RawData {
     pub id: String,
     #[serde(rename = "deviceId")]
     pub device_id: String,
-    pub value: Vec<String>,
+    pub value: Vec<Option<String>>,
     pub time: Option<String>,
+}
+
+impl RawData {
+    pub fn all_value(&self) -> String {
+        self.value
+            .iter()
+            .map(|v| v.clone().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+pub struct GetRawData {
+    pub id: String,
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
+    pub value: Vec<Option<String>>,
+    pub time: String,
+}
+
+impl GetRawData {
+    pub fn all_value(&self) -> String {
+        self.value
+            .iter()
+            .map(|v| v.clone().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
