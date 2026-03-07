@@ -248,13 +248,14 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
         let project_id = project_id().ok_or_else(|| anyhow!("No project id"))?;
         let endpoint = endpoint().ok_or_else(|| anyhow!("No Endpoint"))?;
         let url = endpoint.metadata();
-        let data = client
+        let mut data = client
             .get(url)
             .header("CK", project_id.as_str())
             .send()
             .await?
             .json::<Vec<Device>>()
             .await?;
+        data.sort_by_key(|v| v.id.parse::<u64>().unwrap_or_default());
         Ok(data)
     });
 
@@ -1267,6 +1268,50 @@ fn ActiveNotifyCard(
             return;
         }
 
+        let url = endpoint().active_notify(&device().id);
+        let result = client
+            .post(url)
+            .header("CK", project().project_key.as_str())
+            .json(&edit_notify)
+            .send()
+            .await;
+
+        match result {
+            Ok(data) => {
+                let status = data.status();
+                let text = data
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Error parse String".to_string());
+
+                if status.is_success() {
+                    toastapi.success(
+                        "Updated".to_string(),
+                        ToastOptions::new()
+                            .description(text)
+                            .duration(Duration::from_secs(5)),
+                    );
+                } else {
+                    toastapi.error(
+                        "Update Failed".to_string(),
+                        ToastOptions::new()
+                            .description(format!("{status} {text}"))
+                            .duration(Duration::from_secs(10)),
+                    );
+                    return;
+                }
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+                return;
+            }
+        }
+
         let delete_url = endpoint().active_notify_delete(&device().id, notify_edit().id);
         let ret1 = client
             .delete(delete_url)
@@ -1297,38 +1342,7 @@ fn ActiveNotifyCard(
                 );
             }
         }
-
-        let url = endpoint().active_notify(&device().id);
-        let result = client
-            .post(url)
-            .header("CK", project().project_key.as_str())
-            .json(&edit_notify)
-            .send()
-            .await;
-
-        match result {
-            Ok(data) => {
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
-                toastapi.success(
-                    "Updated".to_string(),
-                    ToastOptions::new()
-                        .description(text)
-                        .duration(Duration::from_secs(5)),
-                );
-                active_notify.restart();
-            }
-            Err(e) => {
-                toastapi.error(
-                    "Update Failed".to_string(),
-                    ToastOptions::new()
-                        .description(format!("{e}"))
-                        .duration(Duration::from_secs(10)),
-                );
-            }
-        }
+        active_notify.restart();
     };
 
     let on_delete_click = move |_| async move {
