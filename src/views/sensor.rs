@@ -24,7 +24,7 @@ use dioxus_free_icons::Icon;
 use dioxus_primitives::toast::{use_toast, ToastOptions};
 use reqwest::{Client, Url};
 use time::format_description::well_known::Iso8601;
-use time::macros::{format_description, offset};
+use time::macros::{datetime, format_description, offset};
 use time::{Date, OffsetDateTime, UtcOffset};
 
 use crate::models::{
@@ -1787,15 +1787,23 @@ pub fn SensorHistoryPanelImpl(
             .date()
     });
 
+    let gmt8_format =
+        format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
     let offsets = vec![offset!(+8), offset!(+0)];
 
     let mut use_utc = use_signal(|| false);
     let use_offset = use_memo(move || if use_utc() { offsets[1] } else { offsets[0] });
+    let mut use_asc = use_signal(|| false);
 
     let format = format_description!("[hour]:[minute]");
 
-    let mut selected_datetime =
-        use_signal(|| OffsetDateTime::new_in_offset(today(), time::Time::MIDNIGHT, offset!(+0)));
+    let mut selected_datetime = use_signal(|| {
+        OffsetDateTime::new_in_offset(
+            today().saturating_add(time::Duration::days(1)),
+            time::Time::MIDNIGHT,
+            offset!(+0),
+        )
+    });
 
     let selected_date = use_memo(move || selected_datetime().date());
     let selected_time = use_memo(move || {
@@ -1808,21 +1816,26 @@ pub fn SensorHistoryPanelImpl(
     let raw_datas: Resource<Result<Vec<GetRawData>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
         let url = endpoint().sensor_rawdata(&device().id, &sensor().id);
-        let start = selected_datetime().replace_offset(use_offset());
-        let end = OffsetDateTime::new_in_offset(
-            selected_datetime().date(),
-            time::Time::MAX,
-            use_offset(),
-        );
-        let start_str = start.format(&Iso8601::DATE_TIME_OFFSET)?;
-        let end_str = end.format(&Iso8601::DATE_TIME_OFFSET)?;
+        let start;
+        let end;
+        if use_asc() {
+            start = selected_datetime().replace_offset(use_offset());
+            end = datetime!(2099-01-01 0:00 UTC);
+        } else {
+            start = OffsetDateTime::UNIX_EPOCH;
+            end = selected_datetime().replace_offset(use_offset());
+        }
+        let start_str = start.to_utc().format(&Iso8601::DATE_TIME_OFFSET)?;
+        let end_str = end.to_utc().format(&Iso8601::DATE_TIME_OFFSET)?;
+        let asc_or_desc = if use_asc() { "ASC" } else { "DESC" };
         let mut url = Url::from_str(&url)?;
         url.query_pairs_mut()
             .append_pair("start", &start_str)
-            .append_pair("end", &end_str);
-        if !use_utc() {
-            url.query_pairs_mut().append_pair("utcOffset", "8");
-        }
+            .append_pair("end", &end_str)
+            .append_pair("order", asc_or_desc);
+        // if !use_utc() {
+        //     url.query_pairs_mut().append_pair("utcOffset", "8");
+        // }
         let ret = client
             .get(url)
             .header("CK", project().project_key.as_str())
@@ -1830,7 +1843,24 @@ pub fn SensorHistoryPanelImpl(
             .await?
             .json::<Vec<GetRawData>>()
             .await?;
-        Ok(ret)
+        let ret2 = if use_utc() {
+            ret
+        } else {
+            ret.iter()
+                .map(|d| {
+                    let t = OffsetDateTime::parse(&d.time, &Iso8601::DATE_TIME_OFFSET)
+                        .map(|i| i.to_offset(offset!(+8)).format(gmt8_format))
+                        .unwrap_or_else(move |_| Ok(d.time.clone()))
+                        .unwrap_or_else(move |_| d.time.clone());
+                    GetRawData {
+                        time: t,
+                        ..d.clone()
+                    }
+                })
+                .collect()
+        };
+
+        Ok(ret2)
     });
 
     let selected_index = use_signal(|| None::<usize>);
@@ -1908,6 +1938,16 @@ pub fn SensorHistoryPanelImpl(
                     SwitchThumb {}
                 }
                 p { "UTC" }
+            }
+
+            div { class: "flex justify-center gap-4",
+                p { "DESC" }
+                Switch {
+                    checked: use_asc(),
+                    on_checked_change: move |b| use_asc.set(b),
+                    SwitchThumb {}
+                }
+                p { "ASC" }
             }
 
             div { class: "flex justify-center gap-4",
