@@ -2,6 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 use crate::components::radio_group::{RadioGroup, RadioItem};
 use crate::models::{Project, Projects};
+use crate::views::global::HeaderContext;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::toast::{use_toast, ToastOptions};
@@ -56,6 +57,9 @@ impl<Lens> Store<DeleteCtx, Lens> {
 
 #[component]
 pub fn ProjectsView() -> Element {
+    use_effect(|| {
+        consume_context::<HeaderContext>().set_title("Projects");
+    });
     let mut projects = use_context::<Signal<Projects>>();
     // let mut projects = use_project_persistence();
     let endpoints = use_context::<Signal<Endpoints>>();

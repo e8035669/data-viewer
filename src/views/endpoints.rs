@@ -6,7 +6,7 @@ use dioxus_primitives::{
     label::Label,
     toast::{use_toast, ToastOptions},
 };
-use crate::models::{Endpoint, EndpointTrait, Endpoints, GeneralEndpoint, EdgeEndpoint};
+use crate::{models::{EdgeEndpoint, Endpoint, EndpointTrait, Endpoints, GeneralEndpoint}, views::global::HeaderContext};
 use crate::persistence::{use_count_persistent, use_endpoints_persistent};
 
 use crate::components::{
@@ -53,6 +53,9 @@ impl<Lens> Store<DeleteInfo, Lens> {
 
 #[component]
 pub fn EndpointView() -> Element {
+    use_effect(|| {
+        consume_context::<HeaderContext>().set_title("Endpoints");
+    });
     let mut endpoints = use_context::<Signal<Endpoints>>();
     // let mut endpoints = use_endpoints_persistent();
     let mut new_info = use_store(|| NewEndpointInfo {

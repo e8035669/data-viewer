@@ -14,6 +14,7 @@ use crate::components::select::{
 use crate::components::switch::{Switch, SwitchThumb};
 use crate::components::textarea::Textarea;
 use crate::views::endpoints;
+use crate::views::global::HeaderContext;
 use anyhow::{anyhow, Error, Result};
 use async_std::task::sleep;
 use base64::prelude::*;
@@ -217,6 +218,10 @@ impl<Lens> Store<PageContext, Lens> {
 
 #[component]
 pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
+    use_effect(move || {
+        let title = project_name();
+        consume_context::<HeaderContext>().set_title(title.as_str());
+    });
     let projects = use_context::<Signal<Projects>>();
     // let projects = use_project_persistence();
     let endpoints = use_context::<Signal<Endpoints>>();

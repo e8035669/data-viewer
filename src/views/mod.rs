@@ -28,3 +28,6 @@ pub use projects::ProjectsView;
 
 mod global;
 pub use global::Providers;
+
+mod monitors;
+pub use monitors::ActiveMonitorView;

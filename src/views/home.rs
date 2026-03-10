@@ -1,4 +1,4 @@
-use crate::Route;
+use crate::{Route, views::global::HeaderContext};
 use dioxus::prelude::*;
 
 /// The Home page component that will be rendered when the current route is `[Route::Home]`.
@@ -7,6 +7,9 @@ use dioxus::prelude::*;
 /// visitors through the initial setup steps: creating an endpoint and then adding a project.
 #[component]
 pub fn Home() -> Element {
+    use_effect(|| {
+        consume_context::<HeaderContext>().set_title("Home");
+    });
     rsx! {
         div { class: "container mx-auto p-8 space-y-8",
             h1 { class: "text-4xl font-bold", "Data Viewer" }

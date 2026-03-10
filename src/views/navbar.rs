@@ -10,6 +10,7 @@ use crate::{
         toast::ToastProvider,
     },
     models::Projects,
+    views::global::HeaderContext,
     Route,
 };
 use dioxus::prelude::*;
@@ -25,6 +26,7 @@ pub fn Navbar() -> Element {
     // let projects = use_project_persistence();
     let projects = use_context::<Signal<Projects>>();
     let keys = use_memo(move || projects().keys().cloned().collect::<Vec<String>>());
+    let header_ctx = use_context::<HeaderContext>();
 
     rsx! {
         // document::Link { rel: "stylesheet", href: NAVBAR_CSS }
@@ -80,6 +82,19 @@ pub fn Navbar() -> Element {
                     }
 
                     SidebarGroup {
+                        SidebarGroupLabel { "Tools" }
+                        SidebarGroupContent {
+                            SidebarMenu {
+                                SidebarLink {
+                                    to: Route::ActiveMonitorView {},
+                                    icon: fa_solid_icons::FaHeartPulse,
+                                    "Monitor"
+                                }
+                            }
+                        }
+                    }
+
+                    SidebarGroup {
                         SidebarGroupLabel { "Setting" }
                         SidebarGroupContent {
                             SidebarMenu {
@@ -127,7 +142,7 @@ pub fn Navbar() -> Element {
                     div { class: "flex items-center gap-3",
                         SidebarTrigger {}
                         Separator { height: "1rem", horizontal: false }
-                        span { class: "text-lg font-bold", "Title" }
+                        span { class: "text-lg font-bold", {header_ctx.title} }
                     }
                 }
                 div { class: "overflow-y-auto",
