@@ -1,12 +1,19 @@
-use anyhow::Result;
+use std::time::Duration;
+
+use anyhow::{anyhow, Result};
+use async_std::task::sleep;
 use dioxus::prelude::*;
+use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 
 use crate::{
     components::{
         badge::Badge,
-        card::{Card, CardContent, CardHeader, CardTitle},
+        button::Button,
+        card::{Card, CardAction, CardContent, CardHeader, CardTitle},
     },
-    models::{Endpoint, Endpoints, Project, Projects},
+    models::{
+        ActiveInfo, ActiveStatus, Device, Endpoint, EndpointTrait, Endpoints, Project, Projects,
+    },
     views::global::HeaderContext,
 };
 
@@ -16,7 +23,7 @@ pub fn ActiveMonitorView() -> Element {
         consume_context::<HeaderContext>().set_title("Active Monitor");
     });
 
-    let mut projects = use_context::<Signal<Projects>>();
+    let projects = use_context::<Signal<Projects>>();
     let endpoints = use_context::<Signal<Endpoints>>();
 
     let projects_clone = projects();
@@ -25,13 +32,10 @@ pub fn ActiveMonitorView() -> Element {
         let endpoint = endpoints.get(&p.endpoint_key);
         if let Some(endpoint) = endpoint {
             rsx! {
-                Card {
-                    CardHeader {
-                        CardTitle { "{k}" }
-                    }
-                    CardContent {
-                        ProjectMonitor { project: p.clone(), endpoint: endpoint.clone() }
-                    }
+                ProjectMonitor {
+                    name: k.clone(),
+                    project: p.clone(),
+                    endpoint: endpoint.clone(),
                 }
             }
         } else {
@@ -71,29 +75,92 @@ struct MonitorStatus {
 }
 
 #[component]
-pub fn ProjectMonitor(project: ReadSignal<Project>, endpoint: ReadSignal<Endpoint>) -> Element {
-    let status_res: Resource<Result<MonitorStatus>> =
-        use_resource(move || async move { Ok(MonitorStatus::default()) });
+pub fn ProjectMonitor(
+    name: ReadSignal<String>,
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+) -> Element {
+    let mut is_loading = use_signal(|| false);
+    let mut status_res: Resource<Result<MonitorStatus>> = use_resource(move || async move {
+        is_loading.set(true);
+        let client = reqwest::Client::new();
+        let devices = client
+            .get(endpoint().all_device())
+            .header("CK", project().project_key.as_str())
+            .send()
+            .await?
+            .json::<Vec<Device>>()
+            .await?;
 
-    rsx! {
-        div { class: "grid justify-center",
-            if let Some(status) = &*status_res.read() {
-                match status {
-                    Ok(status) => rsx! {
-                        div { class: "flex flex-wrap items-center gap-2",
-                            div { class: "p-2 outline", "總數 {status.total}" }
-                            div { class: "p-2 outline", "連線 {status.online}" }
-                            div { class: "p-2 outline", "斷線 {status.offline}" }
-                            div { class: "p-2 outline ", "異常 {status.abnormal}" }
-                            div { class: "p-2 outline", "未知 {status.unset}" }
-                        }
-                    },
-                    Err(_) => rsx! { "Load Error" },
+        let mut status = MonitorStatus::default();
+        status.total = devices.len() as i32;
+
+        for device in devices.iter() {
+            let info = client
+                .get(endpoint().active(&device.id))
+                .header("CK", project().project_key.as_str())
+                .send()
+                .await?
+                .json::<Option<ActiveInfo>>()
+                .await?;
+            if let Some(info) = info {
+                match info.status {
+                    ActiveStatus::Online => status.online += 1,
+                    ActiveStatus::Offline => status.offline += 1,
+                    ActiveStatus::Abnormal => status.abnormal += 1,
+                    _ => status.unset += 1,
                 }
             } else {
-                "Loading"
+                status.unset += 1;
             }
-        
+        }
+        is_loading.set(false);
+        Ok(status)
+    });
+
+    use_future(move || async move {
+        loop {
+            sleep(Duration::from_secs(60)).await;
+            if status_res.finished() {
+                status_res.restart();
+            }
+        }
+    });
+
+    let content = if let Some(status) = &*status_res.read() {
+        match status {
+            Ok(status) => rsx! {
+                div { class: "flex flex-wrap items-center gap-2",
+                    div { class: "p-2 outline", "總數 {status.total}" }
+                    div { class: "p-2 outline", "連線 {status.online}" }
+                    div { class: "p-2 outline", "斷線 {status.offline}" }
+                    div { class: "p-2 outline ", "異常 {status.abnormal}" }
+                    div { class: "p-2 outline", "未知 {status.unset}" }
+                }
+            },
+            Err(_) => rsx! { "Load Error" },
+        }
+    } else {
+        rsx! { "Loading" }
+    };
+
+    let load_cls = if is_loading() {
+        "animate-spin"
+    } else {
+        "hidden"
+    };
+
+    rsx! {
+        Card {
+            CardHeader {
+                CardTitle { {name} }
+                CardAction {
+                    Icon { class: load_cls, icon: fa_solid_icons::FaSpinner }
+                }
+            }
+            CardContent {
+                div { class: "grid justify-center", {content} }
+            }
         }
     }
 }

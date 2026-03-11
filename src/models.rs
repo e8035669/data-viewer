@@ -239,6 +239,13 @@ impl EndpointTrait for Endpoint {
         }
     }
 
+    fn all_device(&self) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.all_device(),
+            Endpoint::Edge(endpoint) => endpoint.all_device(),
+        }
+    }
+
     fn device(&self, device_id: &str) -> String {
         match self {
             Endpoint::General(endpoint) => endpoint.device(device_id),
@@ -295,6 +302,7 @@ pub struct GeneralEndpoint {
 }
 
 pub trait EndpointTrait {
+    fn all_device(&self) -> String;
     fn sensor_rawdata(&self, device_id: &str, sensor_id: &str) -> String;
     fn active_notify(&self, device_id: &str) -> String;
     fn active_setting(&self, device_id: &str) -> String;
@@ -337,6 +345,10 @@ impl EndpointTrait for GeneralEndpoint {
 
     fn kind(&self) -> String {
         "General".to_string()
+    }
+
+    fn all_device(&self) -> String {
+        format!("{}/device", self.base_url)
     }
 
     fn device(&self, device_id: &str) -> String {
@@ -405,6 +417,10 @@ impl EndpointTrait for EdgeEndpoint {
 
     fn kind(&self) -> String {
         "Edge".to_string()
+    }
+
+    fn all_device(&self) -> String {
+        format!("{}/device", self.base_url)
     }
 
     fn device(&self, device_id: &str) -> String {
