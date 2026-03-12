@@ -30,4 +30,4 @@ mod global;
 pub use global::Providers;
 
 mod monitors;
-pub use monitors::ActiveMonitorView;
+pub use monitors::{ActiveMonitorView, MonitorProjectSelectPage, MonitorProjectPage};

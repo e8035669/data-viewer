@@ -88,7 +88,12 @@ pub fn Navbar() -> Element {
                                 SidebarLink {
                                     to: Route::ActiveMonitorView {},
                                     icon: fa_solid_icons::FaHeartPulse,
-                                    "Monitor"
+                                    "Active Monitor"
+                                }
+                                SidebarLink {
+                                    to: Route::MonitorProjectSelectPage {},
+                                    icon: fa_solid_icons::FaHeartPulse,
+                                    "Monitor Devices"
                                 }
                             }
                         }

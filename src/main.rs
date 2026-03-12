@@ -3,19 +3,20 @@
 use dioxus::prelude::*;
 
 use views::{
-    Blog, DevicePage3, EndpointView, Home, Navbar, ProjectsView, SensorPanel, Storage, Storage2, ActiveMonitorView
+    ActiveMonitorView, Blog, DevicePage3, EndpointView, Home, MonitorProjectPage,
+    MonitorProjectSelectPage, Navbar, ProjectsView, SensorPanel, Storage, Storage2,
 };
 
 use crate::views::Providers;
 
 /// Define a components module that contains all shared components for our app.
 mod components;
-/// Define a views module that contains the UI for all Layouts and Routes for our app.
-mod views;
 /// Centralized models (API types) module.
 mod models;
 /// Centralized persistence helpers.
 mod persistence;
+/// Define a views module that contains the UI for all Layouts and Routes for our app.
+mod views;
 
 /// The Route enum is used to define the structure of internal routes in our app. All route enums need to derive
 /// the [`Routable`] trait, which provides the necessary methods for the router to work.
@@ -57,8 +58,14 @@ enum Route {
         #[route("/projects/:project_name")]
         DevicePage3 {project_name: String},
 
-        #[route("/monitors")]
+        #[route("/monitorall")]
         ActiveMonitorView {},
+
+        #[route("/monitor")]
+        MonitorProjectSelectPage {},
+
+        #[route("/monitor/:project_name")]
+        MonitorProjectPage {project_name: String}
 }
 
 // We can import assets in dioxus with the `asset!` macro. This macro takes a path to an asset relative to the crate root.
