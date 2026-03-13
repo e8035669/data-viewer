@@ -25,3 +25,4 @@ pub mod popover;
 pub mod calendar;
 pub mod date_picker;
 pub mod badge;
+pub mod checkbox;
