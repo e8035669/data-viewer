@@ -522,7 +522,7 @@ pub fn SensorView3(
     });
 
     rsx! {
-        div { class: "flex w-full justify-end",
+        div { class: "flex w-full justify-end my-4",
             Button {
                 onclick: move |_| {
                     resource.restart();
@@ -531,7 +531,7 @@ pub fn SensorView3(
                 "Refresh: {timer()}"
             }
         }
-        div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4",
+        div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
             if let Some(response) = &*resource.read() {
                 match response {
                     Ok(sensors) => rsx! {
@@ -1397,18 +1397,17 @@ fn ActiveNotifyCard(
                 DialogDescription {
                     div { class: "flex flex-col gap-4",
                         "Delete id {notify().id}"
-                        div { class: "flex flex-row-reverse gap-4",
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_click,
-                                "Yes"
-                            }
+                        div { class: "flex justify-end gap-4",
                             Button {
                                 variant: ButtonVariant::Primary,
                                 onclick: move |_| delete_dialog_open.set(false),
                                 "NO"
                             }
-                        
+                            Button {
+                                variant: ButtonVariant::Destructive,
+                                onclick: on_delete_click,
+                                "Yes"
+                            }
                         }
                     
                     }

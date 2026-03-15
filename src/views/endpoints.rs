@@ -165,18 +165,17 @@ pub fn EndpointView() -> Element {
                 DialogDescription {
                     div { class: "flex flex-col gap-4",
                         "Delete endpoint {delete_info.target()}"
-                        div { class: "flex flex-row-reverse gap-4",
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+                        div { class: "flex justify-end gap-4",
                             Button {
                                 variant: ButtonVariant::Primary,
                                 onclick: move |_| delete_info.is_open().set(false),
                                 "NO"
                             }
-                        
+                            Button {
+                                variant: ButtonVariant::Destructive,
+                                onclick: on_delete_confirm,
+                                "Yes"
+                            }
                         }
                     
                     }
@@ -188,7 +187,7 @@ pub fn EndpointView() -> Element {
     let cards = rsx! {
         if endpoints.len() > 0 {
             for (name , endpoint) in endpoints().iter() {
-                div { class: "mb-4", key: "{name}",
+                div { key: "{name}",
                     EndpointCard {
                         name,
                         endpoint: endpoint.clone(),
@@ -211,7 +210,7 @@ pub fn EndpointView() -> Element {
         Button { class: "mb-4", onclick: on_new_click, "New" }
         {new_dialog}
         {delete_dialog}
-        {cards}
+        div { class: "grid grid-cols-1 gap-4", {cards} }
     }
 }
 

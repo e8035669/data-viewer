@@ -175,16 +175,16 @@ pub fn ProjectsView() -> Element {
                 DialogDescription {
                     div { class: "flex flex-col gap-4",
                         "Delete endpoint {delete_ctx.target()}"
-                        div { class: "flex flex-row-reverse gap-4",
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+                        div { class: "flex justify-end gap-4",
                             Button {
                                 variant: ButtonVariant::Primary,
                                 onclick: move |_| delete_ctx.is_open().set(false),
                                 "NO"
+                            }
+                            Button {
+                                variant: ButtonVariant::Destructive,
+                                onclick: on_delete_confirm,
+                                "Yes"
                             }
                         }
                     }
@@ -208,10 +208,10 @@ pub fn ProjectsView() -> Element {
     };
 
     rsx! {
-        Button { onclick: on_new_click, "Add" }
+        Button { class: "mb-4", onclick: on_new_click, "Add" }
         {new_dialog}
         {delete_dialog}
-        {cards}
+        div { class: "grid grid-cols-1 gap-4", {cards} }
     }
 }
 
