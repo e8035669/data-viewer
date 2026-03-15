@@ -7,6 +7,9 @@ use crate::components::card::{
     Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 };
 use crate::components::dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle};
+use crate::components::dropdown_menu::{
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+};
 use crate::components::input::Input;
 use crate::components::select::{
     Select, SelectGroup, SelectItemIndicator, SelectList, SelectOption, SelectTrigger, SelectValue,
@@ -522,7 +525,7 @@ pub fn SensorView3(
     });
 
     rsx! {
-        div { class: "flex w-full justify-end my-4",
+        div { class: "flex w-full justify-end my-4 gap-4",
             Button {
                 onclick: move |_| {
                     resource.restart();
@@ -530,6 +533,7 @@ pub fn SensorView3(
                 },
                 "Refresh: {timer()}"
             }
+            Button { "Add Sensor(TODO)" }
         }
         div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
             if let Some(response) = &*resource.read() {
@@ -621,11 +625,42 @@ pub fn SensorPanel3(
                 // CardTitle displays the main heading.
                 CardTitle { {sensor().name} }
                 CardAction {
-                    Button { variant: ButtonVariant::Ghost, onclick: btnclick,
-                        Icon { icon: fa_solid_icons::FaSliders }
-                    }
-                    Button { variant: ButtonVariant::Ghost, onclick: history_click,
-                        Icon { icon: fa_solid_icons::FaClockRotateLeft }
+                    // Button { variant: ButtonVariant::Ghost, onclick: btnclick,
+                    //     Icon { icon: fa_solid_icons::FaSliders }
+                    // }
+                    // Button { variant: ButtonVariant::Ghost, onclick: history_click,
+                    //     Icon { icon: fa_solid_icons::FaClockRotateLeft }
+                    // }
+                    DropdownMenu {
+                        DropdownMenuTrigger {
+                            Icon { icon: fa_solid_icons::FaEllipsis }
+                        }
+                        DropdownMenuContent {
+                            DropdownMenuItem::<String> {
+                                value: "History".to_string(),
+                                index: 0usize,
+                                on_select: history_click,
+                                div { class: "flex gap-2",
+                                    Icon { icon: fa_solid_icons::FaClockRotateLeft }
+                                    "History"
+                                }
+                            }
+                            DropdownMenuItem::<String> {
+                                value: "Attributes".to_string(),
+                                index: 1usize,
+                                on_select: btnclick,
+                                div { class: "flex gap-2",
+                                    Icon { icon: fa_solid_icons::FaSliders }
+                                    "Attributes"
+                                }
+                            }
+                            DropdownMenuItem::<String> { value: "Delete".to_string(), index: 2usize,
+                                div { class: "flex gap-2",
+                                    Icon { icon: fa_solid_icons::FaTrash }
+                                    "Delete(TODO)"
+                                }
+                            }
+                        }
                     }
                 }
             }
