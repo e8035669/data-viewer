@@ -345,6 +345,7 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
         } else {
             p { "Loading..." }
         }
+        div { class: "h-48" }
     }
 }
 
@@ -352,12 +353,14 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
 pub fn DevicesPanels3(devices: Vec<Device>, ctx: Store<PageContext>) -> Element {
     rsx! {
         h1 { class: "text-2xl mb-4", "Devices" }
-        div { class: "grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
+        div { class: "flex justify-end gap-4 mb-4",
+            Button { "Add Device(TODO)" }
+        }
+        div { class: "grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start",
             for d in devices {
-                DevicePanel3 { device: d.clone(), ctx }
+                DevicePanel3 { key: "{d.id}", device: d.clone(), ctx }
             }
         }
-
     }
 }
 
@@ -367,30 +370,66 @@ pub fn DevicePanel3(device: Device, ctx: Store<PageContext>) -> Element {
     let device_clone2 = device.clone();
     let desc = device.desc.unwrap_or_default();
     let view_sensor = move |_| ctx.view_sensors(&device_clone.id);
-    let view_device_attr = move |_| ctx.view_device_attr(&device_clone2.id);
+    let view_device_attr = move |_| {
+        // e.stop_propagation();
+        ctx.view_device_attr(&device_clone2.id)
+    };
     rsx! {
-        div { class: " mb-2",
+        div { onclick: view_sensor,
             Card {
                 CardHeader {
                     CardTitle { {device.name} }
                     CardDescription { {desc} }
                     CardAction {
-                        Button {
-                            variant: ButtonVariant::Ghost,
-                            onclick: view_device_attr,
-                            Icon { icon: fa_solid_icons::FaGear }
+                        DropdownMenu {
+                            DropdownMenuTrigger {
+                                r#as: |attributes| rsx! {
+                                    Button {
+                                        attributes,
+                                        onclick: |e: Event<MouseData>| e.stop_propagation(),
+                                        variant: ButtonVariant::Ghost,
+                                        Icon { icon: fa_solid_icons::FaEllipsisVertical }
+                                    }
+                                },
+                            }
+                            DropdownMenuContent {
+                                DropdownMenuItem::<String> {
+                                    index: 0usize,
+                                    value: "Setting".to_string(),
+                                    on_select: view_device_attr,
+                                    div { class: "flex gap-2",
+                                        Icon { icon: fa_solid_icons::FaGear }
+                                        "Setting"
+                                    }
+                                }
+                                DropdownMenuItem::<String> {
+                                    index: 1usize,
+                                    value: "Delete".to_string(),
+                                    div { class: "flex gap-2",
+                                        Icon { icon: fa_solid_icons::FaTrash }
+                                        "Delete(TODO)"
+                                    }
+                                }
+                            }
                         }
-                        Button {
-                            variant: ButtonVariant::Ghost,
-                            onclick: view_sensor,
-                            Icon { icon: fa_solid_icons::FaEllipsis }
-                        }
+                    
+                    // Button {
+                    //     variant: ButtonVariant::Ghost,
+                    //     onclick: view_device_attr,
+                    //     Icon { icon: fa_solid_icons::FaGear }
+                    // }
+                    // Button {
+                    //     variant: ButtonVariant::Ghost,
+                    //     onclick: view_sensor,
+                    //     Icon { icon: fa_solid_icons::FaEllipsis }
+                    // }
                     }
                 }
                 CardContent {
                     p { {device.id} }
                 }
             }
+        
         }
     }
 }
@@ -633,7 +672,7 @@ pub fn SensorPanel3(
                     // }
                     DropdownMenu {
                         DropdownMenuTrigger {
-                            Icon { icon: fa_solid_icons::FaEllipsis }
+                            Icon { icon: fa_solid_icons::FaEllipsisVertical }
                         }
                         DropdownMenuContent {
                             DropdownMenuItem::<String> {
