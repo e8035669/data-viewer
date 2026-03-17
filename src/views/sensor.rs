@@ -479,13 +479,13 @@ pub fn DevicesPanels3(
         match ret {
             Ok(()) => {
                 toast_api.success(
-                    "Create Success".to_string(),
+                    "Delete Success".to_string(),
                     ToastOptions::new().duration(Duration::from_secs(10)),
                 );
             }
             Err(e) => {
                 toast_api.error(
-                    "Create Failed".to_string(),
+                    "Delete Failed".to_string(),
                     ToastOptions::new()
                         .description(format!("{:?}", e))
                         .duration(Duration::from_secs(10)),
