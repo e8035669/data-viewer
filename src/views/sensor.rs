@@ -11,6 +11,7 @@ use crate::components::dropdown_menu::{
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 };
 use crate::components::input::Input;
+use crate::components::label::Label;
 use crate::components::select::{
     Select, SelectGroup, SelectItemIndicator, SelectList, SelectOption, SelectTrigger, SelectValue,
 };
@@ -296,7 +297,13 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
                 Ok(devices) => rsx! {
                     match ctx.view_status()() {
                         ViewStatus::Device => rsx! {
-                            DevicesPanels3 { devices: devices.to_owned(), ctx }
+                            DevicesPanels3 {
+                                project,
+                                endpoint,
+                                devices: devices.to_owned(),
+                                ctx,
+                                project_meta,
+                            }
                         },
                         ViewStatus::DeviceAttr => rsx! {
                             DeviceAttrPanel {
@@ -335,7 +342,6 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
                                 project_meta,
                             }
                         },
-
                     }
                 },
                 Err(_) => rsx! {
@@ -349,36 +355,215 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
     }
 }
 
+async fn create_device(
+    project: Memo<Option<Project>>,
+    endpoint: Memo<Option<Endpoint>>,
+    new_device: Signal<EditDevice>,
+) -> Result<String> {
+    let client = reqwest::Client::new();
+    let project = project().ok_or_else(|| anyhow!("No Project"))?;
+    let endpoint = endpoint().ok_or_else(|| anyhow!("No Endpoint"))?;
+    let url = endpoint.all_device();
+    let ret = client
+        .post(url)
+        .header("CK", project.project_key.as_str())
+        .json(&new_device())
+        .send()
+        .await?
+        .text()
+        .await?;
+    Ok(ret)
+}
+
+#[derive(Store)]
+pub struct DeleteCtx {
+    pub is_open: bool,
+    pub target: String,
+}
+
+#[store]
+impl<Lens> Store<DeleteCtx, Lens> {
+    // This will automatically require `Writable` on the lens since it takes `&mut self`
+    fn prompt_delete(&mut self, target: &str) {
+        self.target().set(target.to_string());
+        self.is_open().set(true);
+    }
+}
+
+async fn delete_device(
+    project: Memo<Option<Project>>,
+    endpoint: Memo<Option<Endpoint>>,
+    target: String,
+) -> Result<()> {
+    let client = reqwest::Client::new();
+    let project = project().ok_or_else(|| anyhow!("No Project"))?;
+    let endpoint = endpoint().ok_or_else(|| anyhow!("No Endpoint"))?;
+    let url = endpoint.device(&target);
+    let _ret = client
+        .delete(url)
+        .header("CK", project.project_key.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(())
+}
+
 #[component]
-pub fn DevicesPanels3(devices: Vec<Device>, ctx: Store<PageContext>) -> Element {
+pub fn DevicesPanels3(
+    project: Memo<Option<Project>>,
+    endpoint: Memo<Option<Endpoint>>,
+    devices: Vec<Device>,
+    ctx: Store<PageContext>,
+    project_meta: Resource<Result<Vec<Device>>>,
+) -> Element {
+    let mut new_device = use_signal(|| EditDevice::new());
+    let mut new_device_open = use_signal(|| false);
+    let on_create_btn = move |_| async move {
+        let toast_api = use_toast();
+        new_device_open.set(false);
+        let ret = create_device(project, endpoint, new_device).await;
+        match ret {
+            Ok(ret) => {
+                toast_api.success(
+                    "Create Success".to_string(),
+                    ToastOptions::new()
+                        .description(ret.as_str())
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+            Err(e) => {
+                toast_api.error(
+                    "Create Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{:?}", e))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+        project_meta.restart();
+    };
+
+    let dialog = rsx! {
+        DialogRoot {
+            open: new_device_open(),
+            on_open_change: move |v| new_device_open.set(v),
+            DialogContent {
+                DialogTitle { "New Device" }
+                div { class: "grid grid-cols-1 gap-4",
+                    Label { html_for: "add_device_name", "Name" }
+                    Input {
+                        id: "add_device_name",
+                        value: new_device().name,
+                        oninput: move |e: FormEvent| new_device.write().name = e.value(),
+                    }
+                    Label { html_for: "add_device_desc", "Description" }
+                    Textarea {
+                        id: "add_device_desc",
+                        value: new_device().desc,
+                        oninput: move |e: FormEvent| new_device.write().desc = Some(e.value()),
+                    }
+                    Button { onclick: on_create_btn, "Create" }
+                }
+            }
+        }
+    };
+
+    let mut delete_ctx = use_store(|| DeleteCtx {
+        is_open: false,
+        target: String::new(),
+    });
+    let on_delete_confirm = move |_| async move {
+        let toast_api = use_toast();
+        delete_ctx.write().is_open = false;
+        let ret = delete_device(project, endpoint, delete_ctx.target().to_string()).await;
+        match ret {
+            Ok(()) => {
+                toast_api.success(
+                    "Create Success".to_string(),
+                    ToastOptions::new().duration(Duration::from_secs(10)),
+                );
+            }
+            Err(e) => {
+                toast_api.error(
+                    "Create Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{:?}", e))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+        project_meta.restart();
+    };
+    let delete_dialog = rsx! {
+        DialogRoot {
+            open: *delete_ctx.is_open().read(),
+            on_open_change: move |v| delete_ctx.is_open().set(v),
+            DialogContent {
+                DialogTitle { "Delete Device" }
+                DialogDescription {
+                    div { class: "flex flex-col gap-4",
+                        "Delete device {delete_ctx.target()}"
+                        div { class: "flex justify-end gap-4",
+                            Button {
+                                variant: ButtonVariant::Primary,
+                                onclick: move |_| delete_ctx.is_open().set(false),
+                                "NO"
+                            }
+                            Button {
+                                variant: ButtonVariant::Destructive,
+                                onclick: on_delete_confirm,
+                                "Yes"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
     rsx! {
         h1 { class: "text-2xl mb-4", "Devices" }
         div { class: "flex justify-end gap-4 mb-4",
-            Button { "Add Device(TODO)" }
+            Button {
+                onclick: move |_| {
+                    new_device.set(EditDevice::new());
+                    new_device_open.set(true)
+                },
+                "New Device"
+            }
         }
+        {dialog}
+        {delete_dialog}
         div { class: "grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start",
             for d in devices {
-                DevicePanel3 { key: "{d.id}", device: d.clone(), ctx }
+                DevicePanel3 {
+                    key: "{d.id}",
+                    device: d.clone(),
+                    ctx,
+                    delete_ctx,
+                }
             }
         }
     }
 }
 
 #[component]
-pub fn DevicePanel3(device: Device, ctx: Store<PageContext>) -> Element {
-    let device_clone = device.clone();
-    let device_clone2 = device.clone();
-    let desc = device.desc.unwrap_or_default();
-    let view_sensor = move |_| ctx.view_sensors(&device_clone.id);
+pub fn DevicePanel3(
+    device: ReadSignal<Device>,
+    ctx: Store<PageContext>,
+    delete_ctx: Store<DeleteCtx>,
+) -> Element {
+    let desc = device().desc.unwrap_or_default();
+    let view_sensor = move |_| ctx.view_sensors(&device().id);
     let view_device_attr = move |_| {
         // e.stop_propagation();
-        ctx.view_device_attr(&device_clone2.id)
+        ctx.view_device_attr(&device().id)
     };
     rsx! {
         div { onclick: view_sensor,
             Card {
                 CardHeader {
-                    CardTitle { {device.name} }
+                    CardTitle { {device().name} }
                     CardDescription { {desc} }
                     CardAction {
                         DropdownMenu {
@@ -405,9 +590,10 @@ pub fn DevicePanel3(device: Device, ctx: Store<PageContext>) -> Element {
                                 DropdownMenuItem::<String> {
                                     index: 1usize,
                                     value: "Delete".to_string(),
+                                    on_select: move |_| delete_ctx.prompt_delete(&device().id),
                                     div { class: "flex gap-2",
                                         Icon { icon: fa_solid_icons::FaTrash }
-                                        "Delete(TODO)"
+                                        "Delete"
                                     }
                                 }
                             }
@@ -426,7 +612,7 @@ pub fn DevicePanel3(device: Device, ctx: Store<PageContext>) -> Element {
                     }
                 }
                 CardContent {
-                    p { {device.id} }
+                    p { {device().id} }
                 }
             }
         

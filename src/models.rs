@@ -77,6 +77,19 @@ pub struct EditDevice {
     pub attributes: Option<Vec<Attribute>>,
 }
 
+impl EditDevice {
+    pub fn new() -> Self {
+        Self {
+            name: String::new(),
+            desc: Some(String::new()),
+            kind: "general".to_string(),
+            uri: Some(String::new()),
+            attributes: Some(Vec::new()),
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct RawData {
     pub id: String,
