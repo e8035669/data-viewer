@@ -12,6 +12,7 @@ use crate::components::dropdown_menu::{
 };
 use crate::components::input::Input;
 use crate::components::label::Label;
+use crate::components::radio_group::{RadioGroup, RadioItem};
 use crate::components::select::{
     Select, SelectGroup, SelectItemIndicator, SelectList, SelectOption, SelectTrigger, SelectValue,
 };
@@ -28,14 +29,16 @@ use dioxus_free_icons::icons::fa_solid_icons;
 use dioxus_free_icons::Icon;
 use dioxus_primitives::toast::{use_toast, ToastOptions};
 use reqwest::{Client, Url};
+use serde::Serialize;
+use strum::IntoEnumIterator;
 use time::format_description::well_known::Iso8601;
 use time::macros::{datetime, format_description, offset};
 use time::{Date, OffsetDateTime, UtcOffset};
 
 use crate::models::{
     ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute, Device, EditDevice,
-    EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project, Projects, RawData, Sensor,
-    SensorType, SensorWithData,
+    EditSensor, EditSensorStoreExt, Endpoint, EndpointTrait, Endpoints, GetRawData, Project,
+    Projects, RawData, Sensor, SensorStoreExt, SensorType, SensorWithData,
 };
 
 #[component]
@@ -320,6 +323,7 @@ pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
                                 endpoint,
                                 device,
                                 ctx,
+                                project_meta,
                             }
                         },
                         ViewStatus::SensorAttr => rsx! {
@@ -560,7 +564,7 @@ pub fn DevicePanel3(
         ctx.view_device_attr(&device().id)
     };
     rsx! {
-        div { onclick: view_sensor,
+        div { class: "cursor-pointer", onclick: view_sensor,
             Card {
                 CardHeader {
                     CardTitle { {device().name} }
@@ -673,6 +677,7 @@ pub fn SensorsPanels3(
     endpoint: Memo<Option<Endpoint>>,
     device: Memo<Option<Device>>,
     ctx: Store<PageContext>,
+    project_meta: Resource<Result<Vec<Device>>>,
 ) -> Element {
     let sensor_view = if project().is_some() && endpoint().is_some() && device().is_some() {
         let project = project().unwrap();
@@ -685,6 +690,7 @@ pub fn SensorsPanels3(
                 endpoint,
                 device,
                 ctx,
+                project_meta,
             }
         }
     } else {
@@ -702,12 +708,34 @@ pub fn SensorsPanels3(
     }
 }
 
+async fn create_sensor(
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    device: ReadSignal<Device>,
+    new_sensor: Store<Sensor>,
+) -> Result<String> {
+    let client = reqwest::Client::new();
+    let project = project();
+    let endpoint = endpoint();
+    let url = endpoint.all_sensor(&device().id);
+    let ret = client
+        .post(url)
+        .header("CK", project.project_key.as_str())
+        .json(&new_sensor())
+        .send()
+        .await?
+        .text()
+        .await?;
+    Ok(ret)
+}
+
 #[component]
 pub fn SensorView3(
     project: ReadSignal<Project>,
     endpoint: ReadSignal<Endpoint>,
     device: ReadSignal<Device>,
     ctx: Store<PageContext>,
+    project_meta: Resource<Result<Vec<Device>>>,
 ) -> Element {
     let mut timer = use_signal(|| 10);
     let mut resource: Resource<Result<_, Error>> = use_resource(move || async move {
@@ -749,7 +777,87 @@ pub fn SensorView3(
         }
     });
 
+    let mut new_sensor = use_store(|| Sensor::new());
+    let mut new_sensor_open = use_signal(|| false);
+
+    let on_create_btn = move |_| async move {
+        let toast_api = use_toast();
+        new_sensor_open.set(false);
+        let ret = create_sensor(project, endpoint, device, new_sensor).await;
+        match ret {
+            Ok(ret) => {
+                toast_api.success(
+                    "Create Success".to_string(),
+                    ToastOptions::new()
+                        .description(ret.as_str())
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+            Err(e) => {
+                toast_api.error(
+                    "Create Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{:?}", e))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+        project_meta.restart();
+    };
+
+    let radio_items = SensorType::iter().enumerate().map(|(i, t)| {
+        rsx! {
+            RadioItem { index: i, value: serde_json::to_string(&t).unwrap(), {t.to_string()} }
+        }
+    });
+
+    let new_sensor_dialog = rsx! {
+        DialogRoot {
+            open: new_sensor_open(),
+            on_open_change: move |v| new_sensor_open.set(v),
+
+            DialogContent {
+                DialogTitle { "New Sensor" }
+                div { class: "grid grid-cols-1 gap-4",
+                    Label { html_for: "new_sensor_id", "ID" }
+                    Input {
+                        id: "new_sensor_id",
+                        value: new_sensor.id(),
+                        oninput: move |e: FormEvent| new_sensor.id().set(e.value()),
+                    }
+
+                    Label { html_for: "new_sensor_name", "Name" }
+                    Input {
+                        id: "new_sensor_name",
+                        value: new_sensor.name(),
+                        oninput: move |e: FormEvent| new_sensor.name().set(e.value()),
+                    }
+                    Label { html_for: "new_sensor_desc", "Description" }
+                    Textarea {
+                        id: "new_sensor_desc",
+                        value: new_sensor.desc(),
+                        oninput: move |e: FormEvent| new_sensor.desc().set(Some(e.value())),
+                    }
+                    Label { html_for: "new_sensor_type", "Type" }
+                    RadioGroup {
+                        id: "new_sensor_type",
+                        on_value_change: move |v: String| {
+                            if let Ok(v) = serde_json::from_str(&v) {
+                                new_sensor.kind().set(v);
+                            }
+                        },
+                        value: serde_json::to_string(&*new_sensor.kind().read()).unwrap(),
+                        {radio_items}
+                    }
+
+                    Button { onclick: on_create_btn, "Create" }
+                }
+            }
+        }
+    };
+
     rsx! {
+        {new_sensor_dialog}
         div { class: "flex w-full justify-end my-4 gap-4",
             Button {
                 onclick: move |_| {
@@ -758,7 +866,13 @@ pub fn SensorView3(
                 },
                 "Refresh: {timer()}"
             }
-            Button { "Add Sensor(TODO)" }
+            Button {
+                onclick: move |_| {
+                    new_sensor.set(Sensor::new());
+                    new_sensor_open.set(true);
+                },
+                "Add Sensor(TODO)"
+            }
         }
         div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
             if let Some(response) = &*resource.read() {

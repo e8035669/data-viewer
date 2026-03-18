@@ -2,8 +2,9 @@ use core::fmt;
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use strum::{Display, EnumIter};
 
-#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default, EnumIter, Display)]
 #[serde(rename_all = "lowercase")]
 pub enum SensorType {
     #[default]
@@ -19,7 +20,7 @@ pub struct Attribute {
     pub value: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default, Store)]
 pub struct Sensor {
     pub id: String,
     pub name: String,
@@ -31,7 +32,21 @@ pub struct Sensor {
     pub attributes: Option<Vec<Attribute>>,
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default)]
+impl Sensor {
+    pub fn new() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            desc: Some(String::new()),
+            kind: SensorType::Gauge,
+            attributes: Some(Vec::new()),
+            ..Default::default()
+        }
+    }
+}
+
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default, Store)]
 pub struct EditSensor {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -44,6 +59,18 @@ pub struct EditSensor {
     pub formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<Attribute>>,
+}
+
+impl EditSensor {
+    pub fn new() -> Self {
+        Self {
+            name: String::new(),
+            desc: Some(String::new()),
+            kind: SensorType::Gauge,
+            attributes: Some(Vec::new()),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Store, Default)]
@@ -266,6 +293,13 @@ impl EndpointTrait for Endpoint {
         }
     }
 
+    fn all_sensor(&self, device_id: &str) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.all_sensor(device_id),
+            Endpoint::Edge(endpoint) => endpoint.all_sensor(device_id),
+        }
+    }
+
     fn sensor(&self, device_id: &str, sensor_id: &str) -> String {
         match self {
             Endpoint::General(endpoint) => endpoint.sensor(device_id, sensor_id),
@@ -315,6 +349,7 @@ pub struct GeneralEndpoint {
 }
 
 pub trait EndpointTrait {
+    fn all_sensor(&self, device_id: &str) -> String;
     fn all_device(&self) -> String;
     fn sensor_rawdata(&self, device_id: &str, sensor_id: &str) -> String;
     fn active_notify(&self, device_id: &str) -> String;
@@ -368,6 +403,10 @@ impl EndpointTrait for GeneralEndpoint {
         format!("{}/device/{device_id}", self.base_url)
     }
 
+    fn all_sensor(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/sensor", self.base_url)
+    }
+
     fn sensor(&self, device_id: &str, sensor_id: &str) -> String {
         format!("{}/device/{device_id}/sensor/{sensor_id}", self.base_url)
     }
@@ -398,6 +437,10 @@ pub struct EdgeEndpoint {
 }
 
 impl EndpointTrait for EdgeEndpoint {
+    fn all_sensor(&self, device_id: &str) -> String {
+        format!("{}/device/{device_id}/sensor", self.base_url)
+    }
+
     fn sensor(&self, device_id: &str, sensor_id: &str) -> String {
         format!("{}/device/{device_id}/sensor/{sensor_id}", self.base_url)
     }
