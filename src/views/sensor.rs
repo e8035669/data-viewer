@@ -729,6 +729,25 @@ async fn create_sensor(
     Ok(ret)
 }
 
+async fn delete_sensor(
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    device: ReadSignal<Device>,
+    target: String,
+) -> Result<()> {
+    let client = reqwest::Client::new();
+    let project = project();
+    let endpoint = endpoint();
+    let url = endpoint.sensor(&device().id, &target);
+    let _ret = client
+        .delete(url)
+        .header("CK", project.project_key.as_str())
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(())
+}
+
 #[component]
 pub fn SensorView3(
     project: ReadSignal<Project>,
@@ -856,8 +875,64 @@ pub fn SensorView3(
         }
     };
 
+    let mut delete_ctx = use_store(|| DeleteCtx {
+        is_open: false,
+        target: String::new(),
+    });
+
+    let on_delete_confirm = move |_| async move {
+        let toast_api = use_toast();
+        delete_ctx.write().is_open = false;
+        let ret = delete_sensor(project, endpoint, device, delete_ctx.target().to_string()).await;
+        match ret {
+            Ok(()) => {
+                toast_api.success(
+                    "Delete Success".to_string(),
+                    ToastOptions::new().duration(Duration::from_secs(10)),
+                );
+            }
+            Err(e) => {
+                toast_api.error(
+                    "Delete Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{:?}", e))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+        project_meta.restart();
+    };
+
+    let delete_dialog = rsx! {
+        DialogRoot {
+            open: *delete_ctx.is_open().read(),
+            on_open_change: move |v| delete_ctx.is_open().set(v),
+            DialogContent {
+                DialogTitle { "Delete Sensor" }
+                DialogDescription {
+                    div { class: "flex flex-col gap-4",
+                        "Delete sensor {delete_ctx.target()}"
+                        div { class: "flex justify-end gap-4",
+                            Button {
+                                variant: ButtonVariant::Primary,
+                                onclick: move |_| delete_ctx.is_open().set(false),
+                                "NO"
+                            }
+                            Button {
+                                variant: ButtonVariant::Destructive,
+                                onclick: on_delete_confirm,
+                                "Yes"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
     rsx! {
         {new_sensor_dialog}
+        {delete_dialog}
         div { class: "flex w-full justify-end my-4 gap-4",
             Button {
                 onclick: move |_| {
@@ -871,7 +946,7 @@ pub fn SensorView3(
                     new_sensor.set(Sensor::new());
                     new_sensor_open.set(true);
                 },
-                "Add Sensor(TODO)"
+                "Add Sensor"
             }
         }
         div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
@@ -880,11 +955,13 @@ pub fn SensorView3(
                     Ok(sensors) => rsx! {
                         for s in sensors {
                             SensorPanel3 {
+                                key: "{s.sensor.id}",
                                 project,
                                 endpoint,
                                 device,
                                 ctx,
                                 sensor_data: s.clone(),
+                                delete_ctx,
                             }
                         }
                     },
@@ -904,6 +981,7 @@ pub fn SensorPanel3(
     device: ReadSignal<Device>,
     ctx: Store<PageContext>,
     sensor_data: ReadSignal<SensorWithData>,
+    delete_ctx: Store<DeleteCtx>,
 ) -> Element {
     let data = use_memo(move || sensor_data().data);
     let value = use_memo(move || {
@@ -957,6 +1035,7 @@ pub fn SensorPanel3(
 
     let btnclick = move |_| ctx.view_sensor_attr(&sensor_id());
     let history_click = move |_| ctx.view_sensor_history(&sensor_id());
+    let delete_click = move |_| delete_ctx.prompt_delete(&sensor_id());
 
     rsx! {
         Card {
@@ -993,10 +1072,13 @@ pub fn SensorPanel3(
                                     "Attributes"
                                 }
                             }
-                            DropdownMenuItem::<String> { value: "Delete".to_string(), index: 2usize,
+                            DropdownMenuItem::<String> {
+                                value: "Delete".to_string(),
+                                index: 2usize,
+                                on_select: delete_click,
                                 div { class: "flex gap-2",
                                     Icon { icon: fa_solid_icons::FaTrash }
-                                    "Delete(TODO)"
+                                    "Delete"
                                 }
                             }
                         }
