@@ -4,6 +4,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum::{Display, EnumIter};
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Default)]
+pub struct Project {
+    pub project_key: String,
+    pub endpoint_key: String,
+}
+
+pub type Endpoints = HashMap<String, Endpoint>;
+pub type Projects = HashMap<String, Project>;
+
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default, EnumIter, Display)]
 #[serde(rename_all = "lowercase")]
 pub enum SensorType {
@@ -44,7 +53,6 @@ impl Sensor {
         }
     }
 }
-
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default, Store)]
 pub struct EditSensor {
@@ -341,6 +349,20 @@ impl EndpointTrait for Endpoint {
             Endpoint::Edge(endpoint) => endpoint.sensor_rawdata(device_id, sensor_id),
         }
     }
+
+    fn expression(&self, expression_id: &str) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.expression(expression_id),
+            Endpoint::Edge(endpoint) => endpoint.expression(expression_id),
+        }
+    }
+
+    fn all_expression(&self) -> String {
+        match self {
+            Endpoint::General(endpoint) => endpoint.all_expression(),
+            Endpoint::Edge(endpoint) => endpoint.all_expression(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -349,6 +371,8 @@ pub struct GeneralEndpoint {
 }
 
 pub trait EndpointTrait {
+    fn all_expression(&self) -> String;
+    fn expression(&self, expression_id: &str) -> String;
     fn all_sensor(&self, device_id: &str) -> String;
     fn all_device(&self) -> String;
     fn sensor_rawdata(&self, device_id: &str, sensor_id: &str) -> String;
@@ -429,6 +453,14 @@ impl EndpointTrait for GeneralEndpoint {
             self.base_url
         )
     }
+
+    fn expression(&self, expression_id: &str) -> String {
+        format!("{}/expression/{expression_id}", self.base_url)
+    }
+
+    fn all_expression(&self) -> String {
+        format!("{}/expression", self.base_url)
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -501,13 +533,125 @@ impl EndpointTrait for EdgeEndpoint {
             self.base_url
         )
     }
+
+    fn expression(&self, expression_id: &str) -> String {
+        format!("{}/expression/{expression_id}", self.base_url)
+    }
+
+    fn all_expression(&self) -> String {
+        format!("{}/expression", self.base_url)
+    }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Default)]
-pub struct Project {
-    pub project_key: String,
-    pub endpoint_key: String,
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Rule1 {
+    pub id: Option<i32>,
+    pub name: String,
+    pub desc: String,
+    pub expression: String,
+    pub devices: Vec<String>,
+    pub sensor: String,
+    pub enable: String,
+    pub project: String,
+    pub mode: RuleMode,
+    #[serde(rename = "type")]
+    pub r#type: RuleType,
+    pub actions: Vec<Action>,
 }
 
-pub type Endpoints = HashMap<String, Endpoint>;
-pub type Projects = HashMap<String, Project>;
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Action {
+    pub action_type: ActionType,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_event: Option<EmailEvent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_event: Option<DeviceEvent>,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+pub struct EmailEvent {
+    pub email: String,
+    pub subject: String,
+    pub content: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+pub struct DeviceEvent {
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
+    #[serde(rename = "sensorId")]
+    pub sensor_id: String,
+    #[serde(rename = "type")]
+    pub kind: DeviceEventType,
+    pub value: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceEventType {
+    #[default]
+    Rawdata,
+    Cmd,
+    Ack,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ActionType {
+    #[default]
+    EventAction,
+    RecoverAction,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+pub enum RuleType {
+    #[serde(rename = "DATA")]
+    #[default]
+    Data,
+    #[serde(rename = "TIME")]
+    Time,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RuleMode {
+    #[default]
+    Single,
+    Continue,
+    FixedRate,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Rule2 {
+    pub id: Option<String>,
+    pub name: String,
+    pub desc: String,
+    pub project_id: String,
+    pub targets: std::collections::HashMap<String, Vec<String>>,
+    pub formulas: Vec<Formula>,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Formula {
+    pub formula: String,
+    pub type_num: String,
+    pub type_unit: String,
+    pub actions: Vec<FormulaAction>,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FormulaAction {
+    pub action_type: String,
+    pub device_id: String,
+    pub sensor_id: String,
+    #[serde(rename = "CK")]
+    pub ck: String,
+    pub material_type: DeviceEventType,
+    pub values: Vec<String>,
+}

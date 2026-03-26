@@ -18,7 +18,7 @@ mod navbar;
 pub use navbar::Navbar;
 
 mod sensor;
-pub use sensor::{DevicePage3, SensorPanel};
+pub use sensor::{DevicePage3, SensorPanel, TestRule1};
 
 mod endpoints;
 pub use endpoints::{EndpointView, Storage, Storage2};

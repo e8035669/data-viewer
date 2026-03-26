@@ -135,6 +135,12 @@ pub fn Navbar() -> Element {
                                 icon: fa_solid_icons::FaLink,
                                 "Storage2"
                             }
+
+                            SidebarLink {
+                                to: Route::TestRule1 {},
+                                icon: fa_solid_icons::FaLink,
+                                "TestRule1"
+                            }
                         }
                     }
                 }
