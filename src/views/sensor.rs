@@ -34,7 +34,7 @@ use time::macros::{datetime, format_description, offset};
 use time::{Date, OffsetDateTime};
 
 use crate::models::{
-    ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Action, ActionType, Attribute,
+    Action, ActionType, ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute,
     Device, EditDevice, EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project,
     Projects, RawData, Rule1, Sensor, SensorStoreExt, SensorType, SensorWithData,
 };
@@ -2688,22 +2688,23 @@ fn RuleCard(rule: Rule1) -> Element {
 
     rsx! {
         Card {
-            CardHeader { class: "flex flex-col gap-2 md:flex-row md:items-start md:justify-between",
-                div { class: "flex-1",
-                    CardTitle { class: "text-base md:text-lg", "{rule.name}" }
-                    CardDescription { class: "mt-1 text-sm", "{rule.desc}" }
-                }
-                CardAction { class: "flex flex-wrap gap-2",
-                    span { class: "px-2 py-1 rounded text-xs font-medium {enable_badge_style}",
-                        "{rule.enable}"
-                    }
-                    span { class: "px-2 py-1 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200",
-                        "{rule.mode:?}"
+            CardHeader {
+                CardTitle { class: "text-base md:text-lg", "{rule.name}" }
+                CardDescription { class: "mt-1 text-sm", "{rule.desc}" }
+                CardAction {
+                    div { class: "flex gap-2",
+                        span { class: "px-2 py-1 rounded text-xs font-medium {enable_badge_style}",
+                            "{rule.enable}"
+                        }
+                        span { class: "px-2 py-1 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200",
+                            "{rule.mode:?}"
+                        }
+                    
                     }
                 }
             }
 
-            CardContent { class: "space-y-4",
+            CardContent {
                 // Sensor and Devices row (mobile-first: stacked, then 2-column on md)
                 div { class: "grid grid-cols-1 md:grid-cols-2 gap-4",
                     div { class: "min-w-0",
@@ -2729,7 +2730,7 @@ fn RuleCard(rule: Rule1) -> Element {
                 }
 
                 // Expression section
-                div { class: "border-t border-slate-200 dark:border-slate-700 pt-4",
+                div { class: "border-slate-200 dark:border-slate-700 pt-4",
                     p { class: "text-xs font-semibold uppercase tracking-wide mb-2 opacity-70",
                         "Expression"
                     }
@@ -2740,7 +2741,7 @@ fn RuleCard(rule: Rule1) -> Element {
 
                 // Actions section
                 if !rule.actions.is_empty() {
-                    div { class: "border-t border-slate-200 dark:border-slate-700 pt-4",
+                    div { class: "border-slate-200 dark:border-slate-700 pt-4",
                         p { class: "text-xs font-semibold uppercase tracking-wide mb-3 opacity-70",
                             "Actions"
                         }
@@ -2751,12 +2752,12 @@ fn RuleCard(rule: Rule1) -> Element {
                         }
                     }
                 }
-            }
 
-            // Rule ID in footer if present
-            if let Some(id) = rule.id {
-                div { class: "text-xs opacity-50 border-t border-slate-200 dark:border-slate-700 pt-3",
-                    "Rule ID: {id}"
+                // Rule ID in footer if present
+                if let Some(id) = rule.id {
+                    div { class: "text-xs opacity-50 border-t border-slate-200 dark:border-slate-700 pt-3",
+                        "Rule ID: {id}"
+                    }
                 }
             }
         }
@@ -2766,8 +2767,12 @@ fn RuleCard(rule: Rule1) -> Element {
 #[component]
 fn ActionItemDisplay(action: Action) -> Element {
     let container_style = match action.action_type {
-        ActionType::EventAction => "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950",
-        ActionType::RecoverAction => "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950",
+        ActionType::EventAction => {
+            "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950"
+        }
+        ActionType::RecoverAction => {
+            "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950"
+        }
     };
 
     let action_type_text_color = match action.action_type {
