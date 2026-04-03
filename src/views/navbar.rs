@@ -141,6 +141,12 @@ pub fn Navbar() -> Element {
                                 icon: fa_solid_icons::FaLink,
                                 "TestRule1"
                             }
+
+                            SidebarLink {
+                                to: Route::DrawRoiPage {},
+                                icon: fa_solid_icons::FaDrawPolygon,
+                                "Draw ROI"
+                            }
                         }
                     }
                 }

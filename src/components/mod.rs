@@ -26,3 +26,4 @@ pub mod calendar;
 pub mod date_picker;
 pub mod badge;
 pub mod checkbox;
+pub mod aspect_ratio;

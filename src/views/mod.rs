@@ -31,3 +31,6 @@ pub use global::Providers;
 
 mod monitors;
 pub use monitors::{ActiveMonitorView, MonitorProjectSelectPage, MonitorProjectPage};
+
+mod draw_roi;
+pub use draw_roi::DrawRoiPage;

@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 
 use views::{
     ActiveMonitorView, Blog, DevicePage3, EndpointView, Home, MonitorProjectPage,
-    MonitorProjectSelectPage, Navbar, ProjectsView, SensorPanel, Storage, Storage2, TestRule1,
+    MonitorProjectSelectPage, Navbar, ProjectsView, SensorPanel, Storage, Storage2, TestRule1, DrawRoiPage,
 };
 
 use crate::views::Providers;
@@ -69,6 +69,9 @@ enum Route {
 
         #[route("/test_rule1")]
         TestRule1 {},
+
+        #[route("/draw_roi")]
+        DrawRoiPage {},
 }
 
 // We can import assets in dioxus with the `asset!` macro. This macro takes a path to an asset relative to the crate root.
