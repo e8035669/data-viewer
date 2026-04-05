@@ -1,6 +1,9 @@
-use crate::components::{aspect_ratio::AspectRatio, input::Input};
+use std::ops::Add;
+
+use crate::components::{aspect_ratio::AspectRatio, button::Button, input::Input};
 use base64::prelude::*;
 use dioxus::{html::input_data::MouseButton, logger::tracing, prelude::*, web::WebEventExt};
+use euclid::{point2, size2, Point2D};
 use web_sys::{
     wasm_bindgen::JsCast, CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement,
 };
@@ -28,6 +31,10 @@ pub fn DrawRoiPage() -> Element {
         offset_y: 0.0,
         mouse_display_xy: None,
         mouse_canvas_xy: None,
+        current_points: Vec::new(),
+        drawed_rois: Vec::new(),
+        mouse_down_pos: None,
+        is_dragging: false,
     });
 
     use_effect(move || {
@@ -58,6 +65,7 @@ pub fn DrawRoiPage() -> Element {
     // 縮放：滑鼠滾輪 / 手機雙指捏合
     let on_wheel = move |e: Event<WheelData>| {
         e.prevent_default();
+        tracing::info!("on_wheel {:?}", e.data());
         let delta = e.delta().strip_units().y;
         let zoom_factor = if delta > 0.0 { 0.9 } else { 1.1 };
 
@@ -84,15 +92,19 @@ pub fn DrawRoiPage() -> Element {
 
         ctx.mouse_display_xy = Some((xy.x, xy.y));
         ctx.mouse_canvas_xy = Some(ctx.to_canvas_pos(xy.x, xy.y));
-        tracing::info!(
-            "Move xy display: {:?}, canvas: {:?}",
-            ctx.mouse_display_xy,
-            ctx.mouse_canvas_xy
-        );
 
         if e.held_buttons().contains(MouseButton::Primary) {
-            let we = e.as_web_event();
+            // 偵測是否發生了足夠的拖曳（超過 5 像素閾值）
+            if let Some((down_x, down_y)) = ctx.mouse_down_pos {
+                let dx = xy.x - down_x;
+                let dy = xy.y - down_y;
+                let distance = (dx * dx + dy * dy).sqrt();
+                if distance > 5.0 {
+                    ctx.is_dragging = true;
+                }
+            }
 
+            let we = e.as_web_event();
             let move_canvas_xy = ctx.to_canvas_pos(we.movement_x() as f64, we.movement_y() as f64);
             ctx.offset_x += move_canvas_xy.0;
             ctx.offset_y += move_canvas_xy.1;
@@ -101,10 +113,93 @@ pub fn DrawRoiPage() -> Element {
 
     let on_mouse_leave = move |e: MouseEvent| {
         e.prevent_default();
+        tracing::info!("on_mouse_leave {:?}", e.data());
         let mut ctx = draw_ctx.write();
         ctx.mouse_canvas_xy = None;
         ctx.mouse_display_xy = None;
     };
+
+    let on_mouse_down = move |e: MouseEvent| {
+        e.prevent_default();
+        let xy = e.element_coordinates();
+        let mut ctx = draw_ctx.write();
+        ctx.mouse_down_pos = Some((xy.x, xy.y));
+        ctx.is_dragging = false;
+        tracing::info!("on_mouse_down at {:?}", ctx.mouse_down_pos);
+    };
+
+    let on_click = move |e: MouseEvent| {
+        e.prevent_default();
+        let mut ctx = draw_ctx.write();
+        let js_event = e.as_web_event().dyn_into::<web_sys::PointerEvent>().unwrap();
+        tracing::info!("on_click {:?}", js_event);
+
+        // 只有在沒有拖曳時才認為是有效的點擊
+        if ctx.is_dragging {
+            tracing::info!("忽略拖曳後的點擊");
+            ctx.mouse_down_pos = None;
+            return;
+        }
+
+        if let Some(canvas_xy) = ctx.mouse_canvas_xy {
+            let offset = size2(-ctx.offset_x, -ctx.offset_y);
+            let point = point2(canvas_xy.0, canvas_xy.1).add_size(&offset).to_i32();
+            ctx.current_points.push(point);
+            tracing::info!("新增點：{:?}", point);
+        }
+        ctx.mouse_down_pos = None;
+    };
+    let on_double_click = move |e: MouseEvent| {
+        e.prevent_default();
+        let mut ctx = draw_ctx.write();
+        // 雙擊之前會有兩次單擊，要刪掉
+        ctx.current_points.pop();
+        ctx.current_points.pop();
+
+        if ctx.current_points.len() > 2 {
+            // 閉合目前多邊形並新增至已完成清單
+            let completed_roi = ctx.current_points.clone();
+            ctx.drawed_rois.push(completed_roi);
+            ctx.current_points.clear();
+            tracing::info!("已閉合多邊形，共有 ROI 數：{}", ctx.drawed_rois.len());
+        } else {
+            tracing::info!("無法閉合多邊形 - 需要至少 3 個點");
+        }
+        ctx.mouse_down_pos = None;
+        ctx.is_dragging = false;
+    };
+
+    let on_touch_start = move |e: TouchEvent| {
+        e.prevent_default();
+        tracing::info!("on_touch_start {:?}", e.data());
+    };
+
+    let on_touch_move = move |e: TouchEvent| {
+        e.prevent_default();
+        tracing::info!("on_touch_move {:?}", e.data());
+    };
+
+    let on_touch_end = move |e: TouchEvent| {
+        e.prevent_default();
+        tracing::info!("on_touch_end {:?}", e.data());
+    };
+
+    let draw_ctx_clone = draw_ctx();
+    let rois_content = draw_ctx_clone
+        .drawed_rois
+        .iter()
+        .enumerate()
+        .map(|(idx, roi)| {
+            let roi_text = roi_to_string(roi);
+            rsx! {
+                div { key: "{idx}", class: "flex items-center gap-2",
+                    div { "ROI {idx}" }
+                    div { class: "font-mono text-sm", {roi_text} }
+                }
+            }
+        });
+    let draw_ctx_clone = draw_ctx();
+    let all_rois = rois_to_string(&draw_ctx_clone.drawed_rois);
 
     rsx! {
         img {
@@ -131,9 +226,16 @@ pub fn DrawRoiPage() -> Element {
                     class: "w-full h-full border",
                     width: 1920,
                     height: 1080,
+                    ontouchstart: on_touch_start,
+                    ontouchmove: on_touch_move,
+                    ontouchend: on_touch_end,
+                    onclick: on_click,
+                    ondoubleclick: on_double_click,
                     onwheel: on_wheel,
+                    onmousedown: on_mouse_down,
                     onmousemove: on_mouse_move,
                     onmouseleave: on_mouse_leave,
+
                     onresize: move |e| {
                         e.prevent_default();
                         tracing::info!("canvas.onresize {:?}", e.data());
@@ -162,9 +264,39 @@ pub fn DrawRoiPage() -> Element {
                     },
                 }
             }
+
+            // 已繪製 ROI 的內容顯示區域
+            div { class: "border rounded p-3 max-h-40 overflow-y-auto",
+                if draw_ctx().drawed_rois.is_empty() {
+                    p { class: "text-sm", "尚未繪製任何 ROI" }
+                } else {
+                    {rois_content}
+                }
+            }
+
+            // 所有 ROI 串成一行的顯示區域，附帶複製按鈕
+            if !draw_ctx().drawed_rois.is_empty() {
+                div { class: "border rounded p-3 space-y-2 mt-2",
+                    h3 { class: "text-sm font-semibold", "完整 ROI 資料" }
+                    div { class: "flex gap-2 items-start",
+                        div { class: "flex-1 border rounded p-2 overflow-x-auto",
+                            code {
+                                id: "all_rois",
+                                class: "text-xs font-mono break-all whitespace-pre-wrap",
+                                "{all_rois}"
+                            }
+                        }
+                        Button { "onclick": "navigator.clipboard.writeText(document.getElementById('all_rois').textContent);",
+                            "複製"
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
+struct Pixel;
 
 #[derive(Clone)]
 struct DrawContext {
@@ -178,6 +310,10 @@ struct DrawContext {
     offset_y: f64,
     mouse_display_xy: Option<(f64, f64)>,
     mouse_canvas_xy: Option<(f64, f64)>,
+    drawed_rois: Vec<Vec<Point2D<i32, Pixel>>>,
+    current_points: Vec<Point2D<i32, Pixel>>,
+    mouse_down_pos: Option<(f64, f64)>,
+    is_dragging: bool,
 }
 
 impl DrawContext {
@@ -189,6 +325,26 @@ impl DrawContext {
     }
 }
 
+fn roi_to_string(roi: &Vec<Point2D<i32, Pixel>>) -> String {
+    let mut ret = String::from("[");
+    let content = roi
+        .iter()
+        .map(|p| format!("\'{},{}\'", p.x, p.y))
+        .collect::<Vec<_>>()
+        .join(",");
+    ret.push_str(&content);
+    ret.push(']');
+    ret
+}
+
+fn rois_to_string(rois: &Vec<Vec<Point2D<i32, Pixel>>>) -> String {
+    let mut ret = String::from("[");
+    let content = rois.iter().map(roi_to_string).collect::<Vec<_>>().join(",");
+    ret.push_str(&content);
+    ret.push(']');
+    ret
+}
+
 fn redraw(ctx: &CanvasRenderingContext2d, draw_ctx: &DrawContext) {
     ctx.reset();
     ctx.scale(draw_ctx.scale, draw_ctx.scale).unwrap();
@@ -198,8 +354,76 @@ fn redraw(ctx: &CanvasRenderingContext2d, draw_ctx: &DrawContext) {
             .unwrap();
     }
 
+    let offset_xy = size2(draw_ctx.offset_x, draw_ctx.offset_y);
+
+    // 繪製已完成的多邊形（綠色）
+    ctx.set_line_width(2.0);
+    for roi in &draw_ctx.drawed_rois {
+        ctx.begin_path();
+        for (i, p) in roi.iter().enumerate() {
+            let canvas_xy = p.to_f64().add_size(&offset_xy);
+            if i == 0 {
+                ctx.move_to(canvas_xy.x, canvas_xy.y);
+            } else {
+                ctx.line_to(canvas_xy.x, canvas_xy.y);
+            }
+        }
+        ctx.close_path();
+        ctx.stroke();
+
+        // 繪製已完成多邊形的頂點（小圓點）
+        for p in roi.iter() {
+            let canvas_xy = p.to_f64().add_size(&offset_xy);
+            ctx.begin_path();
+            ctx.arc(
+                canvas_xy.x,
+                canvas_xy.y,
+                4.0,
+                0.0,
+                std::f64::consts::PI * 2.0,
+            )
+            .unwrap();
+            ctx.fill();
+        }
+    }
+
+    // 繪製目前多邊形（虛線效果用線寬變化）
+    ctx.set_line_width(2.0);
+    if !draw_ctx.current_points.is_empty() {
+        ctx.begin_path();
+        for (i, p) in draw_ctx.current_points.iter().enumerate() {
+            let canvas_xy = p.to_f64().add_size(&offset_xy);
+            if i == 0 {
+                ctx.move_to(canvas_xy.x, canvas_xy.y);
+            } else {
+                ctx.line_to(canvas_xy.x, canvas_xy.y);
+            }
+        }
+        // 繪製從最後一個點到滑鼠位置的預覽線
+        if let Some(xy) = draw_ctx.mouse_canvas_xy {
+            ctx.line_to(xy.0, xy.1);
+        }
+        ctx.stroke();
+
+        // 繪製目前多邊形的頂點（較大的圓點）
+        for p in draw_ctx.current_points.iter() {
+            let canvas_xy = p.to_f64().add_size(&offset_xy);
+            ctx.begin_path();
+            ctx.arc(
+                canvas_xy.x,
+                canvas_xy.y,
+                5.0,
+                0.0,
+                std::f64::consts::PI * 2.0,
+            )
+            .unwrap();
+            ctx.fill();
+        }
+    }
+
+    // 繪製滑鼠十字準線
     if let Some(xy) = &draw_ctx.mouse_canvas_xy {
-        ctx.set_line_width(5.0);
+        ctx.set_line_width(1.0);
         ctx.begin_path();
         ctx.move_to(xy.0 - 10., xy.1);
         ctx.line_to(xy.0 + 10., xy.1);

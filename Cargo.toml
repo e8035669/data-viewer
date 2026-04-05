@@ -22,12 +22,13 @@ dioxus = { version = "0.7.1", features = ["router"] }
 dioxus-free-icons = { version = "0.10.0", features = ["font-awesome-regular", "font-awesome-solid"] }
 dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version = "0.0.1", default-features = false }
 dioxus-sdk-storage = "0.7.0"
+euclid = "0.22.14"
 reqwest = { version = "0.13.2", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 strum = { version = "0.28.0", features = ["derive"] }
 time = { version = "0.3.47", features = ["formatting", "local-offset", "macros", "parsing", "wasm-bindgen"] }
-web-sys = { version = "0.3.94", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "HtmlImageElement", "Url"] }
+web-sys = { version = "0.3.94", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "HtmlImageElement", "MouseEvent", "PointerEvent", "Url"] }
 
 [features]
 default = ["web"]
