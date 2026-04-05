@@ -66,8 +66,13 @@ pub fn DrawRoiPage() -> Element {
             ctx.scale = (ctx.scale * zoom_factor).clamp(0.1, 5.0);
             tracing::info!("New scale: {}", ctx.scale);
 
-            if let Some(xy) = &ctx.mouse_canvas_xy {
-                // TODO: 以滑鼠為中心放大
+            if let (Some(xy), Some(can_xy)) = (&ctx.mouse_display_xy, &ctx.mouse_canvas_xy) {
+                let image_xy = (can_xy.0 - ctx.offset_x, can_xy.1 - ctx.offset_y);
+                let new_canvas_xy = ctx.to_canvas_pos(xy.0, xy.1);
+                let new_offset_xy = (new_canvas_xy.0 - image_xy.0, new_canvas_xy.1 - image_xy.1);
+                ctx.mouse_canvas_xy = Some(new_canvas_xy);
+                ctx.offset_x = new_offset_xy.0;
+                ctx.offset_y = new_offset_xy.1;
             }
         }
     };
@@ -182,7 +187,6 @@ impl DrawContext {
             y * self.canvas_height / self.display_height / self.scale,
         )
     }
-
 }
 
 fn redraw(ctx: &CanvasRenderingContext2d, draw_ctx: &DrawContext) {
