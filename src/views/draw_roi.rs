@@ -611,6 +611,7 @@ pub fn DrawRoiPage() -> Element {
         }});
 
     rsx! {
+        p { "🚧施工中🚧" }
         img {
             class: "hidden",
             src: selected_file(),
