@@ -7,7 +7,12 @@ use crate::components::{
     toolbar::{Toolbar, ToolbarButton, ToolbarGroup},
 };
 use base64::prelude::*;
-use dioxus::{html::input_data::MouseButton, logger::tracing, prelude::*, web::WebEventExt};
+use dioxus::{
+    html::{geometry::ElementPoint, input_data::MouseButton},
+    logger::tracing,
+    prelude::*,
+    web::WebEventExt,
+};
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::scroll_area::ScrollDirection;
 use euclid::{point2, size2, Point2D};
@@ -16,20 +21,44 @@ use web_sys::{
     wasm_bindgen::JsCast, CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement,
 };
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolMode {
-    #[default]
     View,
+    #[default]
     Draw,
     Edit,
     Delete,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Store)]
 struct ToolStatus {
     mode: ToolMode,
-    highlight: Option<String>,
-    editing: Option<String>,
+    mouse_down_pos: Option<(f64, f64)>,
+    is_dragging: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct EditStatus {
+    target: String,
+    near: Option<usize>,
+    drag: Option<usize>,
+}
+
+impl EditStatus {
+    fn new(target: &str) -> Self {
+        Self {
+            target: target.to_string(),
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+enum HightlightStatus {
+    #[default]
+    None,
+    View(String),
+    Edit(EditStatus),
 }
 
 struct Pixel;
@@ -48,8 +77,8 @@ struct DrawContext {
     mouse_canvas_xy: Option<(f64, f64)>,
     drawed_rois: IndexMap<String, Vec<Point2D<i32, Pixel>>>,
     current_points: Vec<Point2D<i32, Pixel>>,
-    mouse_down_pos: Option<(f64, f64)>,
-    is_dragging: bool,
+    highlight: HightlightStatus,
+    next_roi_id: usize,
 }
 
 impl DrawContext {
@@ -67,8 +96,8 @@ impl DrawContext {
             mouse_canvas_xy: None,
             current_points: Vec::new(),
             drawed_rois: IndexMap::new(),
-            mouse_down_pos: None,
-            is_dragging: false,
+            highlight: HightlightStatus::default(),
+            next_roi_id: 0,
         }
     }
 
@@ -169,16 +198,54 @@ impl DrawContext {
             }
         }
 
+        // 繪製高亮的ROI（紅色，線寬更寬）
+        match &draw_ctx.highlight {
+            HightlightStatus::None => {}
+            HightlightStatus::View(target) | HightlightStatus::Edit(EditStatus { target, .. }) => {
+                if let Some(roi) = draw_ctx.drawed_rois.get(target) {
+                    ctx.set_stroke_style_str("red");
+                    ctx.set_fill_style_str("red");
+                    ctx.set_line_width(4.0); // 比普通線條更粗
+                    ctx.begin_path();
+                    for (i, p) in roi.iter().enumerate() {
+                        let canvas_xy = p.to_f64().add_size(&offset_xy);
+                        if i == 0 {
+                            ctx.move_to(canvas_xy.x, canvas_xy.y);
+                        } else {
+                            ctx.line_to(canvas_xy.x, canvas_xy.y);
+                        }
+                    }
+                    ctx.close_path();
+                    ctx.stroke();
+
+                    // 繪製高亮多邊形的頂點（紅色，較大）
+                    for p in roi.iter() {
+                        let canvas_xy = p.to_f64().add_size(&offset_xy);
+                        ctx.begin_path();
+                        ctx.arc(
+                            canvas_xy.x,
+                            canvas_xy.y,
+                            6.0, // 比普通頂點更大
+                            0.0,
+                            std::f64::consts::PI * 2.0,
+                        )
+                        .unwrap();
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+
         // 繪製滑鼠十字準線
         ctx.set_stroke_style_str("black");
         ctx.set_fill_style_str("black");
         if let Some(xy) = &draw_ctx.mouse_canvas_xy {
             ctx.set_line_width(1.0);
             ctx.begin_path();
-            ctx.move_to(xy.0 - 10., xy.1);
-            ctx.line_to(xy.0 + 10., xy.1);
-            ctx.move_to(xy.0, xy.1 - 10.);
-            ctx.line_to(xy.0, xy.1 + 10.);
+            ctx.move_to(xy.0 - 20., xy.1);
+            ctx.line_to(xy.0 + 20., xy.1);
+            ctx.move_to(xy.0, xy.1 - 20.);
+            ctx.line_to(xy.0, xy.1 + 20.);
             ctx.stroke();
         }
     }
@@ -197,6 +264,32 @@ impl DrawContext {
             self.offset_x = new_offset_xy.0;
             self.offset_y = new_offset_xy.1;
         }
+    }
+
+    fn highlight_clear(&mut self) {
+        self.highlight = HightlightStatus::None;
+    }
+
+    fn highlight_view(&mut self, target: String) {
+        if self.drawed_rois.contains_key(&target) {
+            self.highlight = HightlightStatus::View(target);
+        }
+    }
+
+    fn highlight_edit(&mut self, target: String) {
+        if self.drawed_rois.contains_key(&target) {
+            self.highlight = HightlightStatus::Edit(EditStatus::new(&target));
+        }
+    }
+
+    fn insert_new_roi(&mut self, completed_roi: Vec<Point2D<i32, Pixel>>) {
+        let mut roi_name = format!("ROI {}", self.next_roi_id); // 用計數器生成名稱
+        while self.drawed_rois.contains_key(&roi_name) {
+            self.next_roi_id += 1;
+            roi_name = format!("ROI {}", self.next_roi_id);
+        }
+        self.drawed_rois.insert(roi_name, completed_roi);
+        self.next_roi_id += 1; // 每次遞增
     }
 }
 
@@ -230,28 +323,37 @@ impl DrawRoiContext {
         self.canvas_ctx = Some(ctx);
     }
 
-    fn canvas_move(&mut self, e: &MouseEvent) {
+    fn update_mouse_xy(&mut self, xy: &ElementPoint) {
         let ctx = &mut self.draw_ctx;
-        let xy = e.element_coordinates();
-
         ctx.mouse_display_xy = Some((xy.x, xy.y));
         ctx.mouse_canvas_xy = Some(ctx.to_canvas_pos(xy.x, xy.y));
+    }
+
+    fn add_offset_xy(&mut self, x: f64, y: f64) {
+        let ctx = &mut self.draw_ctx;
+        ctx.offset_x += x;
+        ctx.offset_y += y;
+    }
+
+    fn canvas_move(&mut self, e: &MouseEvent) {
+        let xy = e.element_coordinates();
+        self.update_mouse_xy(&xy);
 
         if e.held_buttons().contains(MouseButton::Primary) {
             // 偵測是否發生了足夠的拖曳（超過 5 像素閾值）
-            if let Some((down_x, down_y)) = ctx.mouse_down_pos {
+            if let Some((down_x, down_y)) = &self.tool_ctx.mouse_down_pos {
                 let dx = xy.x - down_x;
                 let dy = xy.y - down_y;
                 let distance = (dx * dx + dy * dy).sqrt();
                 if distance > 5.0 {
-                    ctx.is_dragging = true;
+                    self.tool_ctx.is_dragging = true;
                 }
             }
 
             let we = e.as_web_event();
+            let ctx = &self.draw_ctx;
             let move_canvas_xy = ctx.to_canvas_pos(we.movement_x() as f64, we.movement_y() as f64);
-            ctx.offset_x += move_canvas_xy.0;
-            ctx.offset_y += move_canvas_xy.1;
+            self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
         }
     }
 
@@ -263,54 +365,82 @@ impl DrawRoiContext {
 
     fn canvas_mouse_down(&mut self, e: &MouseEvent) {
         let xy = e.element_coordinates();
-        let ctx = &mut self.draw_ctx;
-        ctx.mouse_down_pos = Some((xy.x, xy.y));
-        ctx.is_dragging = false;
-        tracing::info!("on_mouse_down at {:?}", ctx.mouse_down_pos);
+        let tool_ctx = &mut self.tool_ctx;
+        tool_ctx.mouse_down_pos = Some((xy.x, xy.y));
+        tool_ctx.is_dragging = false;
+        tracing::info!("on_mouse_down at {:?}", tool_ctx.mouse_down_pos);
     }
 
-    fn canvas_click(&mut self, e: &MouseEvent) {
-        let ctx = &mut self.draw_ctx;
-        let js_event = e
-            .as_web_event()
-            .dyn_into::<web_sys::PointerEvent>()
-            .unwrap();
-        tracing::info!("on_click {:?}", js_event);
-
-        // 只有在沒有拖曳時才認為是有效的點擊
-        if ctx.is_dragging {
-            tracing::info!("忽略拖曳後的點擊");
-            ctx.mouse_down_pos = None;
+    fn add_point_impl(&mut self) {
+        if self.tool_ctx.mode != ToolMode::Draw {
             return;
         }
 
+        let ctx = &mut self.draw_ctx;
         if let Some(canvas_xy) = ctx.mouse_canvas_xy {
             let offset = size2(-ctx.offset_x, -ctx.offset_y);
             let point = point2(canvas_xy.0, canvas_xy.1).add_size(&offset).to_i32();
             ctx.current_points.push(point);
             tracing::info!("新增點：{:?}", point);
         }
-        ctx.mouse_down_pos = None;
     }
 
-    fn canvas_double_click(&mut self, _e: &MouseEvent) {
+    fn close_current_roi(&mut self) {
+        if self.tool_ctx.mode != ToolMode::Draw {
+            return;
+        }
         let ctx = &mut self.draw_ctx;
-        // 雙擊之前會有兩次單擊，要刪掉
-        ctx.current_points.pop();
-        ctx.current_points.pop();
-
         if ctx.current_points.len() > 2 {
             // 閉合目前多邊形並新增至已完成清單
             let completed_roi = ctx.current_points.clone();
-            let roi_name = format!("ROI {}", ctx.drawed_rois.len()); // 自動生成名稱
-            ctx.drawed_rois.insert(roi_name, completed_roi);
+            ctx.insert_new_roi(completed_roi);
             ctx.current_points.clear();
             tracing::info!("已閉合多邊形，共有 ROI 數：{}", ctx.drawed_rois.len());
         } else {
             tracing::info!("無法閉合多邊形 - 需要至少 3 個點");
         }
-        ctx.mouse_down_pos = None;
-        ctx.is_dragging = false;
+    }
+
+    fn canvas_click(&mut self, e: &MouseEvent) {
+        let tool_ctx = &mut self.tool_ctx;
+
+        // 只有在沒有拖曳時才認為是有效的點擊
+        if tool_ctx.is_dragging {
+            tracing::info!("忽略拖曳後的點擊");
+            tool_ctx.mouse_down_pos = None;
+            return;
+        }
+        tool_ctx.mouse_down_pos = None;
+        self.add_point_impl();
+    }
+
+    fn canvas_double_click(&mut self, _e: &MouseEvent) {
+        let ctx = &mut self.draw_ctx;
+        let tool_ctx = &mut self.tool_ctx;
+        // 雙擊之前會有兩次單擊，要刪掉
+        ctx.current_points.pop();
+        ctx.current_points.pop();
+
+        tool_ctx.mouse_down_pos = None;
+        tool_ctx.is_dragging = false;
+
+        self.close_current_roi();
+    }
+}
+
+#[store]
+impl<Lens> Store<DrawRoiContext, Lens> {
+    fn set_tool_mode(&mut self, mode: ToolMode) {
+        match mode {
+            ToolMode::View => {
+                self.draw_ctx().write().current_points.clear();
+            }
+            ToolMode::Draw => {}
+            ToolMode::Edit => {}
+            ToolMode::Delete => {}
+        }
+        self.draw_ctx().write().highlight_clear();
+        self.tool_ctx().mode().set(mode);
     }
 }
 
@@ -428,7 +558,7 @@ pub fn DrawRoiPage() -> Element {
         .map(|(idx, (name, roi))| {
             let roi_text = roi_to_string(roi);
             rsx! {
-                div { key: "{idx}", class: "flex items-center gap-2",
+                div { key: "{name}", class: "flex items-center gap-2",
                     div { "{name}" }
                     div { class: "font-mono text-sm", {roi_text} }
                 }
@@ -436,6 +566,49 @@ pub fn DrawRoiPage() -> Element {
         });
     let draw_ctx_clone = draw_ctx();
     let all_rois = rois_to_string(&draw_ctx_clone.drawed_rois);
+
+    let roi_keys = draw_ctx().drawed_rois.keys().cloned().collect::<Vec<_>>();
+    let rois_list = roi_keys.iter().map(|k| {
+        let k = k.clone();
+        let k2 = k.clone();
+        let k3 = k.clone();
+        rsx!{
+            div { class: "flex", key: "ROI_{k}",
+                div { class: "flex-1", "{k}" }
+                div { class: if draw_roi_ctx.tool_ctx().mode() == ToolMode::View { "" } else { "hidden" },
+                    Button {
+                        variant: ButtonVariant::Secondary,
+                        onclick: move |_| {
+                            let k = k3.clone();
+                            draw_roi_ctx.draw_ctx().write().highlight_view(k);
+                        },
+                        Icon { icon: fa_solid_icons::FaLightbulb }
+                    }
+                }
+
+                div { class: if draw_roi_ctx.tool_ctx().mode() == ToolMode::Edit { "" } else { "hidden" },
+                    Button {
+                        variant: ButtonVariant::Secondary,
+                        onclick: move |_| {
+                            let k = k.clone();
+                            draw_roi_ctx.draw_ctx().write().highlight_edit(k);
+                        },
+                        Icon { icon: fa_solid_icons::FaPencil }
+                    }
+                }
+                div { class: if draw_roi_ctx.tool_ctx().mode() == ToolMode::Delete { "" } else { "hidden" },
+                    Button {
+                        variant: ButtonVariant::Secondary,
+                        onclick: move |_| {
+                            let k = k2.clone();
+                            draw_roi_ctx.draw_ctx().write().drawed_rois.shift_remove(&k);
+                        },
+                        Icon { icon: fa_solid_icons::FaSquareMinus }
+                    }
+                }
+            }
+
+        }});
 
     rsx! {
         img {
@@ -488,72 +661,45 @@ pub fn DrawRoiPage() -> Element {
                 div { class: "grid grid-cols-1 gap-2",
                     Toolbar {
                         ToolbarGroup {
-                            ToolbarButton { index: 0usize,
+                            ToggleToolbarButton {
+                                index: 0usize,
+                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::View,
+                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::View),
                                 Icon { icon: fa_solid_icons::FaHand }
                             }
-                            ToolbarButton { index: 1usize,
+                            ToggleToolbarButton {
+                                index: 1usize,
+                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Draw,
+                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::Draw),
+
                                 Icon { icon: fa_solid_icons::FaSquarePlus }
                             }
-                            ToolbarButton { index: 2usize,
+                            ToggleToolbarButton {
+                                index: 2usize,
+                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Edit,
+                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::Edit),
+
                                 Icon { icon: fa_solid_icons::FaPencil }
                             }
-                            ToolbarButton { index: 3usize,
+                            ToggleToolbarButton {
+                                index: 3usize,
+                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Delete,
+                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::Delete),
                                 Icon { icon: fa_solid_icons::FaSquareMinus }
                             }
                         }
                     }
 
                     ScrollArea {
-                        class: "border border-(--primary-color-6) grid grid-cols-1 gap-2 p-2",
+                        class: "border border-(--primary-color-6) grid grid-cols-1 gap-2 p-2 max-h-64",
                         direction: ScrollDirection::Vertical,
-
-                        div { class: "flex",
-                            div { class: "flex-1", "ROI 1" }
-                            div {
-                                Button { variant: ButtonVariant::Secondary,
-                                    Icon { icon: fa_solid_icons::FaPencil }
-                                }
-                            }
-                            div {
-                                Button { variant: ButtonVariant::Secondary,
-                                    Icon { icon: fa_solid_icons::FaSquareMinus }
-                                }
-                            }
-                        
-                        }
-
-                        div { class: "flex",
-                            div { class: "flex-1", "ROI 2" }
-                            div {
-                                Button { variant: ButtonVariant::Secondary,
-                                    Icon { icon: fa_solid_icons::FaPencil }
-                                }
-                            }
-                            div {
-                                Button { variant: ButtonVariant::Secondary,
-                                    Icon { icon: fa_solid_icons::FaSquareMinus }
-                                }
-                            }
-                        
-                        }
-                        div { class: "flex",
-                            div { class: "flex-1", "ROI 3" }
-                            div {
-                                Button { variant: ButtonVariant::Secondary,
-                                    Icon { icon: fa_solid_icons::FaPencil }
-                                }
-                            }
-                            div {
-                                Button { variant: ButtonVariant::Secondary,
-                                    Icon { icon: fa_solid_icons::FaSquareMinus }
-                                }
-                            }
-                        
+                        if draw_ctx().drawed_rois.is_empty() {
+                            p { class: "text-sm", "ROI列表顯示在此" }
+                        } else {
+                            {rois_list}
                         }
                     }
-                
                 }
-            
             }
 
             // 已繪製 ROI 的內容顯示區域
@@ -578,11 +724,30 @@ pub fn DrawRoiPage() -> Element {
                             }
                         }
                         Button { "onclick": "navigator.clipboard.writeText(document.getElementById('all_rois').textContent);",
-                            "複製"
+                            Icon { icon: fa_solid_icons::FaClipboard }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+#[component]
+fn ToggleToolbarButton(
+    index: usize,
+    is_on: bool,
+    on_click: Callback<()>,
+    children: Element,
+) -> Element {
+    rsx! {
+        ToolbarButton {
+            index,
+            on_click,
+            "data-state": if is_on { "on" } else { "off" },
+            background: if is_on { "var(--light, var(--primary-color-5)) var(--dark, var(--primary-color-6))" } else { "" },
+            color: if is_on { "var(--secondary-color-1)" } else { "" },
+            {children}
         }
     }
 }
