@@ -3,7 +3,6 @@ use crate::components::{
     button::{Button, ButtonVariant},
     input::Input,
     scroll_area::ScrollArea,
-    toggle_group::{ToggleGroup, ToggleItem},
     toolbar::{Toolbar, ToolbarButton, ToolbarGroup},
 };
 use base64::prelude::*;
@@ -106,6 +105,48 @@ impl DrawContext {
             x * self.canvas_width / self.display_width / self.scale,
             y * self.canvas_height / self.display_height / self.scale,
         )
+    }
+
+    fn update_mouse_xy(&mut self, x: f64, y: f64) {
+        self.mouse_display_xy = Some((x, y));
+        self.mouse_canvas_xy = Some(self.to_canvas_pos(x, y));
+    }
+
+    fn mouse_leave(&mut self) {
+        self.mouse_display_xy = None;
+        self.mouse_canvas_xy = None;
+    }
+
+    fn add_offset_xy(&mut self, x: f64, y: f64) {
+        self.offset_x += x;
+        self.offset_y += y;
+    }
+
+    fn add_point(&mut self) {
+        if let Some(canvas_xy) = self.mouse_canvas_xy {
+            let offset = size2(-self.offset_x, -self.offset_y);
+            let point = point2(canvas_xy.0, canvas_xy.1).add_size(&offset).to_i32();
+            self.current_points.push(point);
+            tracing::info!("新增點：{:?}", point);
+        }
+    }
+
+    fn pop_last_point(&mut self, repeat: i32) {
+        for _ in 0..repeat {
+            self.current_points.pop();
+        }
+    }
+
+    fn close_current_roi(&mut self) {
+        if self.current_points.len() > 2 {
+            // 閉合目前多邊形並新增至已完成清單
+            let completed_roi = self.current_points.clone();
+            self.insert_new_roi(completed_roi);
+            self.current_points.clear();
+            tracing::info!("已閉合多邊形，共有 ROI 數：{}", self.drawed_rois.len());
+        } else {
+            tracing::info!("無法閉合多邊形 - 需要至少 3 個點");
+        }
     }
 
     fn canvas_resize(&mut self, e: &ResizeEvent) {
@@ -324,15 +365,11 @@ impl DrawRoiContext {
     }
 
     fn update_mouse_xy(&mut self, xy: &ElementPoint) {
-        let ctx = &mut self.draw_ctx;
-        ctx.mouse_display_xy = Some((xy.x, xy.y));
-        ctx.mouse_canvas_xy = Some(ctx.to_canvas_pos(xy.x, xy.y));
+        self.draw_ctx.update_mouse_xy(xy.x, xy.y);
     }
 
     fn add_offset_xy(&mut self, x: f64, y: f64) {
-        let ctx = &mut self.draw_ctx;
-        ctx.offset_x += x;
-        ctx.offset_y += y;
+        self.draw_ctx.add_offset_xy(x, y);
     }
 
     fn canvas_move(&mut self, e: &MouseEvent) {
@@ -351,16 +388,15 @@ impl DrawRoiContext {
             }
 
             let we = e.as_web_event();
-            let ctx = &self.draw_ctx;
-            let move_canvas_xy = ctx.to_canvas_pos(we.movement_x() as f64, we.movement_y() as f64);
+            let move_canvas_xy = self
+                .draw_ctx
+                .to_canvas_pos(we.movement_x() as f64, we.movement_y() as f64);
             self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
         }
     }
 
-    fn canvas_leave(&mut self, e: &MouseEvent) {
-        let ctx = &mut self.draw_ctx;
-        ctx.mouse_canvas_xy = None;
-        ctx.mouse_display_xy = None;
+    fn canvas_leave(&mut self, _e: &MouseEvent) {
+        self.draw_ctx.mouse_leave();
     }
 
     fn canvas_mouse_down(&mut self, e: &MouseEvent) {
@@ -371,37 +407,7 @@ impl DrawRoiContext {
         tracing::info!("on_mouse_down at {:?}", tool_ctx.mouse_down_pos);
     }
 
-    fn add_point_impl(&mut self) {
-        if self.tool_ctx.mode != ToolMode::Draw {
-            return;
-        }
-
-        let ctx = &mut self.draw_ctx;
-        if let Some(canvas_xy) = ctx.mouse_canvas_xy {
-            let offset = size2(-ctx.offset_x, -ctx.offset_y);
-            let point = point2(canvas_xy.0, canvas_xy.1).add_size(&offset).to_i32();
-            ctx.current_points.push(point);
-            tracing::info!("新增點：{:?}", point);
-        }
-    }
-
-    fn close_current_roi(&mut self) {
-        if self.tool_ctx.mode != ToolMode::Draw {
-            return;
-        }
-        let ctx = &mut self.draw_ctx;
-        if ctx.current_points.len() > 2 {
-            // 閉合目前多邊形並新增至已完成清單
-            let completed_roi = ctx.current_points.clone();
-            ctx.insert_new_roi(completed_roi);
-            ctx.current_points.clear();
-            tracing::info!("已閉合多邊形，共有 ROI 數：{}", ctx.drawed_rois.len());
-        } else {
-            tracing::info!("無法閉合多邊形 - 需要至少 3 個點");
-        }
-    }
-
-    fn canvas_click(&mut self, e: &MouseEvent) {
+    fn canvas_click(&mut self, _e: &MouseEvent) {
         let tool_ctx = &mut self.tool_ctx;
 
         // 只有在沒有拖曳時才認為是有效的點擊
@@ -411,20 +417,22 @@ impl DrawRoiContext {
             return;
         }
         tool_ctx.mouse_down_pos = None;
-        self.add_point_impl();
+        if self.tool_ctx.mode == ToolMode::Draw {
+            self.draw_ctx.add_point();
+        }
     }
 
     fn canvas_double_click(&mut self, _e: &MouseEvent) {
-        let ctx = &mut self.draw_ctx;
         let tool_ctx = &mut self.tool_ctx;
-        // 雙擊之前會有兩次單擊，要刪掉
-        ctx.current_points.pop();
-        ctx.current_points.pop();
 
         tool_ctx.mouse_down_pos = None;
         tool_ctx.is_dragging = false;
 
-        self.close_current_roi();
+        if self.tool_ctx.mode == ToolMode::Draw {
+            // 雙擊之前會有兩次單擊，要刪掉
+            self.draw_ctx.pop_last_point(2);
+            self.draw_ctx.close_current_roi();
+        }
     }
 }
 
@@ -551,19 +559,15 @@ pub fn DrawRoiPage() -> Element {
     };
 
     let draw_ctx_clone = draw_ctx();
-    let rois_content = draw_ctx_clone
-        .drawed_rois
-        .iter()
-        .enumerate()
-        .map(|(idx, (name, roi))| {
-            let roi_text = roi_to_string(roi);
-            rsx! {
-                div { key: "{name}", class: "flex items-center gap-2",
-                    div { "{name}" }
-                    div { class: "font-mono text-sm", {roi_text} }
-                }
+    let rois_content = draw_ctx_clone.drawed_rois.iter().map(|(name, roi)| {
+        let roi_text = roi_to_string(roi);
+        rsx! {
+            div { key: "{name}", class: "flex items-center gap-2",
+                div { "{name}" }
+                div { class: "font-mono text-sm", {roi_text} }
             }
-        });
+        }
+    });
     let draw_ctx_clone = draw_ctx();
     let all_rois = rois_to_string(&draw_ctx_clone.drawed_rois);
 
