@@ -149,6 +149,22 @@ impl DrawContext {
         }
     }
 
+    fn get_drawed_rois(&self) -> IndexMap<String, Vec<Point2D<i32, Pixel>>> {
+        self.drawed_rois.clone()
+    }
+
+    fn get_drawed_rois_key(&self) -> Vec<String> {
+        self.drawed_rois.keys().cloned().collect::<Vec<_>>()
+    }
+
+    fn remove_drawed_roi(&mut self, name: &str) {
+        self.drawed_rois.shift_remove(name);
+    }
+
+    fn is_drawed_roi_empty(&self) -> bool {
+        self.drawed_rois.is_empty()
+    }
+
     fn canvas_resize(&mut self, e: &ResizeEvent) {
         let s = e.get_content_box_size().unwrap();
         self.display_height = s.height;
@@ -558,8 +574,8 @@ pub fn DrawRoiPage() -> Element {
         tracing::info!("on_touch_end {:?}", e.data());
     };
 
-    let draw_ctx_clone = draw_ctx();
-    let rois_content = draw_ctx_clone.drawed_rois.iter().map(|(name, roi)| {
+    let drawed_rois = draw_ctx.read().get_drawed_rois();
+    let rois_content = drawed_rois.iter().map(|(name, roi)| {
         let roi_text = roi_to_string(roi);
         rsx! {
             div { key: "{name}", class: "flex items-center gap-2",
@@ -568,10 +584,10 @@ pub fn DrawRoiPage() -> Element {
             }
         }
     });
-    let draw_ctx_clone = draw_ctx();
-    let all_rois = rois_to_string(&draw_ctx_clone.drawed_rois);
+    let drawed_rois = draw_ctx.read().get_drawed_rois();
+    let all_rois = rois_to_string(&drawed_rois);
 
-    let roi_keys = draw_ctx().drawed_rois.keys().cloned().collect::<Vec<_>>();
+    let roi_keys = draw_ctx.read().get_drawed_rois_key();
     let rois_list = roi_keys.iter().map(|k| {
         let k = k.clone();
         let k2 = k.clone();
@@ -605,7 +621,7 @@ pub fn DrawRoiPage() -> Element {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
                             let k = k2.clone();
-                            draw_roi_ctx.draw_ctx().write().drawed_rois.shift_remove(&k);
+                            draw_roi_ctx.draw_ctx().write().remove_drawed_roi(&k);
                         },
                         Icon { icon: fa_solid_icons::FaSquareMinus }
                     }
@@ -698,7 +714,7 @@ pub fn DrawRoiPage() -> Element {
                     ScrollArea {
                         class: "border border-(--primary-color-6) grid grid-cols-1 gap-2 p-2 max-h-64",
                         direction: ScrollDirection::Vertical,
-                        if draw_ctx().drawed_rois.is_empty() {
+                        if draw_ctx().is_drawed_roi_empty() {
                             p { class: "text-sm", "ROI列表顯示在此" }
                         } else {
                             {rois_list}
@@ -709,7 +725,7 @@ pub fn DrawRoiPage() -> Element {
 
             // 已繪製 ROI 的內容顯示區域
             div { class: "border rounded p-3 max-h-40 overflow-y-auto",
-                if draw_ctx().drawed_rois.is_empty() {
+                if draw_ctx().is_drawed_roi_empty() {
                     p { class: "text-sm", "尚未繪製任何 ROI" }
                 } else {
                     {rois_content}
@@ -717,7 +733,7 @@ pub fn DrawRoiPage() -> Element {
             }
 
             // 所有 ROI 串成一行的顯示區域，附帶複製按鈕
-            if !draw_ctx().drawed_rois.is_empty() {
+            if !draw_ctx().is_drawed_roi_empty() {
                 div { class: "border rounded p-3 space-y-2 mt-2",
                     h3 { class: "text-sm font-semibold", "完整 ROI 資料" }
                     div { class: "flex gap-2 items-start",
