@@ -29,12 +29,15 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 strum = { version = "0.28.0", features = ["derive"] }
 time = { version = "0.3.47", features = ["formatting", "local-offset", "macros", "parsing", "wasm-bindgen"] }
-web-sys = { version = "0.3.94", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "HtmlImageElement", "MouseEvent", "PointerEvent", "Url"] }
+# Web-only dependencies
+web-sys = { version = "0.3.94", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "HtmlImageElement", "MouseEvent", "PointerEvent", "Url"], optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.4", optional = true }
 
 [features]
 default = ["web"]
 # The feature that are only required for the web = ["dioxus/web"] build target should be optional and only enabled in the web = ["dioxus/web"] feature
-web = ["dioxus/web"]
+web = ["dioxus/web", "web-sys", "wasm-bindgen", "serde-wasm-bindgen"]
 # The feature that are only required for the desktop = ["dioxus/desktop"] build target should be optional and only enabled in the desktop = ["dioxus/desktop"] feature
 desktop = ["dioxus/desktop"]
 # The feature that are only required for the mobile = ["dioxus/mobile"] build target should be optional and only enabled in the mobile = ["dioxus/mobile"] feature

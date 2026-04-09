@@ -5,20 +5,19 @@ use crate::components::{
     scroll_area::ScrollArea,
     toolbar::{Toolbar, ToolbarButton, ToolbarGroup},
 };
+use crate::canvas_api::{redraw_canvas, HighlightConfig, RedrawConfig};
 use base64::prelude::*;
 use dioxus::{
     html::{geometry::ElementPoint, input_data::MouseButton},
     logger::tracing,
     prelude::*,
-    web::WebEventExt,
 };
+#[cfg(feature = "web")]
+use dioxus::web::WebEventExt;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::scroll_area::ScrollDirection;
 use euclid::{point2, size2, Point2D};
 use indexmap::IndexMap;
-use web_sys::{
-    wasm_bindgen::JsCast, CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement,
-};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolMode {
@@ -64,7 +63,7 @@ struct Pixel;
 
 #[derive(Debug, Clone)]
 struct DrawContext {
-    image: Option<HtmlImageElement>,
+    image_src: Option<String>,
     canvas_height: f64,
     canvas_width: f64,
     display_height: f64,
@@ -83,7 +82,7 @@ struct DrawContext {
 impl DrawContext {
     fn new() -> Self {
         Self {
-            image: None,
+            image_src: None,
             canvas_height: 1080.,
             canvas_width: 1920.,
             display_height: 1080.,
@@ -171,140 +170,44 @@ impl DrawContext {
         self.display_width = s.width;
     }
 
-    fn redraw(&self, ctx: &CanvasRenderingContext2d) {
-        DrawContext::redraw0(self, ctx);
-    }
+    fn redraw(&self, _ctx: Option<()>) {
+        // Prepare the configuration for canvas rendering
+        let drawed_rois_vec: Vec<Vec<(i32, i32)>> = self
+            .drawed_rois
+            .values()
+            .map(|roi| roi.iter().map(|p| (p.x, p.y)).collect())
+            .collect();
 
-    fn redraw0(draw_ctx: &DrawContext, ctx: &CanvasRenderingContext2d) {
-        ctx.reset();
-        ctx.scale(draw_ctx.scale, draw_ctx.scale).unwrap();
+        let current_points_vec: Vec<(i32, i32)> = self
+            .current_points
+            .iter()
+            .map(|p| (p.x, p.y))
+            .collect();
 
-        if let Some(image) = &draw_ctx.image {
-            ctx.draw_image_with_html_image_element(image, draw_ctx.offset_x, draw_ctx.offset_y)
-                .unwrap();
-        }
+        let highlight = match &self.highlight {
+            HightlightStatus::None => None,
+            HightlightStatus::View(target) => Some(HighlightConfig {
+                name: target.clone(),
+                is_edit: false,
+            }),
+            HightlightStatus::Edit(status) => Some(HighlightConfig {
+                name: status.target.clone(),
+                is_edit: true,
+            }),
+        };
 
-        let offset_xy = size2(draw_ctx.offset_x, draw_ctx.offset_y);
+        let config = RedrawConfig {
+            scale: self.scale,
+            offset_x: self.offset_x,
+            offset_y: self.offset_y,
+            drawed_rois: drawed_rois_vec,
+            current_points: current_points_vec,
+            mouse_xy: self.mouse_canvas_xy,
+            highlight,
+        };
 
-        // 繪製已完成的多邊形（綠色）
-        ctx.set_stroke_style_str("green");
-        ctx.set_fill_style_str("green");
-        ctx.set_line_width(2.0);
-        for roi in draw_ctx.drawed_rois.values() {
-            ctx.begin_path();
-            for (i, p) in roi.iter().enumerate() {
-                let canvas_xy = p.to_f64().add_size(&offset_xy);
-                if i == 0 {
-                    ctx.move_to(canvas_xy.x, canvas_xy.y);
-                } else {
-                    ctx.line_to(canvas_xy.x, canvas_xy.y);
-                }
-            }
-            ctx.close_path();
-            ctx.stroke();
-
-            // 繪製已完成多邊形的頂點（小圓點）
-            for p in roi.iter() {
-                let canvas_xy = p.to_f64().add_size(&offset_xy);
-                ctx.begin_path();
-                ctx.arc(
-                    canvas_xy.x,
-                    canvas_xy.y,
-                    4.0,
-                    0.0,
-                    std::f64::consts::PI * 2.0,
-                )
-                .unwrap();
-                ctx.fill();
-            }
-        }
-
-        // 繪製目前多邊形（虛線效果用線寬變化）
-        ctx.set_stroke_style_str("red");
-        ctx.set_fill_style_str("red");
-        ctx.set_line_width(2.0);
-        if !draw_ctx.current_points.is_empty() {
-            ctx.begin_path();
-            for (i, p) in draw_ctx.current_points.iter().enumerate() {
-                let canvas_xy = p.to_f64().add_size(&offset_xy);
-                if i == 0 {
-                    ctx.move_to(canvas_xy.x, canvas_xy.y);
-                } else {
-                    ctx.line_to(canvas_xy.x, canvas_xy.y);
-                }
-            }
-            // 繪製從最後一個點到滑鼠位置的預覽線
-            if let Some(xy) = draw_ctx.mouse_canvas_xy {
-                ctx.line_to(xy.0, xy.1);
-            }
-            ctx.stroke();
-
-            // 繪製目前多邊形的頂點（較大的圓點）
-            for p in draw_ctx.current_points.iter() {
-                let canvas_xy = p.to_f64().add_size(&offset_xy);
-                ctx.begin_path();
-                ctx.arc(
-                    canvas_xy.x,
-                    canvas_xy.y,
-                    5.0,
-                    0.0,
-                    std::f64::consts::PI * 2.0,
-                )
-                .unwrap();
-                ctx.fill();
-            }
-        }
-
-        // 繪製高亮的ROI（紅色，線寬更寬）
-        match &draw_ctx.highlight {
-            HightlightStatus::None => {}
-            HightlightStatus::View(target) | HightlightStatus::Edit(EditStatus { target, .. }) => {
-                if let Some(roi) = draw_ctx.drawed_rois.get(target) {
-                    ctx.set_stroke_style_str("red");
-                    ctx.set_fill_style_str("red");
-                    ctx.set_line_width(4.0); // 比普通線條更粗
-                    ctx.begin_path();
-                    for (i, p) in roi.iter().enumerate() {
-                        let canvas_xy = p.to_f64().add_size(&offset_xy);
-                        if i == 0 {
-                            ctx.move_to(canvas_xy.x, canvas_xy.y);
-                        } else {
-                            ctx.line_to(canvas_xy.x, canvas_xy.y);
-                        }
-                    }
-                    ctx.close_path();
-                    ctx.stroke();
-
-                    // 繪製高亮多邊形的頂點（紅色，較大）
-                    for p in roi.iter() {
-                        let canvas_xy = p.to_f64().add_size(&offset_xy);
-                        ctx.begin_path();
-                        ctx.arc(
-                            canvas_xy.x,
-                            canvas_xy.y,
-                            6.0, // 比普通頂點更大
-                            0.0,
-                            std::f64::consts::PI * 2.0,
-                        )
-                        .unwrap();
-                        ctx.fill();
-                    }
-                }
-            }
-        }
-
-        // 繪製滑鼠十字準線
-        ctx.set_stroke_style_str("black");
-        ctx.set_fill_style_str("black");
-        if let Some(xy) = &draw_ctx.mouse_canvas_xy {
-            ctx.set_line_width(1.0);
-            ctx.begin_path();
-            ctx.move_to(xy.0 - 20., xy.1);
-            ctx.line_to(xy.0 + 20., xy.1);
-            ctx.move_to(xy.0, xy.1 - 20.);
-            ctx.line_to(xy.0, xy.1 + 20.);
-            ctx.stroke();
-        }
+        // Call the canvas API (only does something on web targets)
+        redraw_canvas("roi-canvas", &config, self.image_src.as_deref());
     }
 
     fn canvas_wheel(&mut self, delta: f64) {
@@ -354,8 +257,6 @@ impl DrawContext {
 struct DrawRoiContext {
     tool_ctx: ToolStatus,
     draw_ctx: DrawContext,
-    canvas_ctx: Option<CanvasRenderingContext2d>,
-    canvas_ref: Option<HtmlCanvasElement>,
 }
 
 impl DrawRoiContext {
@@ -363,21 +264,7 @@ impl DrawRoiContext {
         Self {
             tool_ctx: Default::default(),
             draw_ctx: DrawContext::new(),
-            canvas_ctx: None,
-            canvas_ref: None,
         }
-    }
-
-    fn canvas_mounted(&mut self, e: &MountedEvent) {
-        let canvas_ref = e.as_web_event().dyn_into::<HtmlCanvasElement>().unwrap();
-        let ctx = canvas_ref
-            .get_context("2d")
-            .unwrap()
-            .unwrap()
-            .dyn_into::<CanvasRenderingContext2d>()
-            .unwrap();
-        self.canvas_ref = Some(canvas_ref);
-        self.canvas_ctx = Some(ctx);
     }
 
     fn update_mouse_xy(&mut self, xy: &ElementPoint) {
@@ -403,11 +290,14 @@ impl DrawRoiContext {
                 }
             }
 
-            let we = e.as_web_event();
-            let move_canvas_xy = self
-                .draw_ctx
-                .to_canvas_pos(we.movement_x() as f64, we.movement_y() as f64);
-            self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
+            #[cfg(feature = "web")]
+            {
+                let we = e.as_web_event();
+                let move_canvas_xy = self
+                    .draw_ctx
+                    .to_canvas_pos(we.movement_x() as f64, we.movement_y() as f64);
+                self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
+            }
         }
     }
 
@@ -498,14 +388,11 @@ pub fn DrawRoiPage() -> Element {
 
     let mut draw_roi_ctx = use_store(|| DrawRoiContext::new());
 
-    let canvas_ctx = draw_roi_ctx.canvas_ctx();
     let mut draw_ctx = draw_roi_ctx.draw_ctx();
 
     use_effect(move || {
-        let Some(ctx) = canvas_ctx() else {
-            return;
-        };
-        draw_ctx.read().redraw(&ctx);
+        // Trigger redraw whenever draw_ctx changes
+        draw_ctx.read().redraw(None);
     });
 
     let on_file_input = move |e: FormEvent| async move {
@@ -523,7 +410,8 @@ pub fn DrawRoiPage() -> Element {
     };
 
     let on_image_load = move |_| {
-        draw_ctx.write();
+        draw_ctx.write().image_src = Some(selected_file());
+        draw_ctx.read().redraw(None);
     };
 
     // 縮放：滑鼠滾輪 / 手機雙指捏合
@@ -633,18 +521,10 @@ pub fn DrawRoiPage() -> Element {
     rsx! {
         p { "🚧施工中🚧" }
         img {
+            id: "roi-image",
             class: "hidden",
             src: selected_file(),
             onload: on_image_load,
-            onmounted: move |e| {
-                tracing::info!("img.onmounted");
-                let image_elem = e
-                    .as_web_event()
-                    .dyn_into::<HtmlImageElement>()
-                    .unwrap()
-                    .clone();
-                draw_ctx.write().image = Some(image_elem);
-            },
         }
 
         div { class: "grid grid-cols-1 gap-2",
@@ -655,6 +535,7 @@ pub fn DrawRoiPage() -> Element {
 
                 AspectRatio { ratio: 16. / 9.,
                     canvas {
+                        id: "roi-canvas",
                         class: "w-full h-full border",
                         width: 1920,
                         height: 1080,
@@ -671,10 +552,6 @@ pub fn DrawRoiPage() -> Element {
                         onresize: move |e| {
                             tracing::info!("canvas.onresize {:?}", e.data());
                             draw_roi_ctx.draw_ctx().write().canvas_resize(&e);
-                        },
-                        onmounted: move |e| {
-                            tracing::info!("canvas.onmounted");
-                            draw_roi_ctx.write().canvas_mounted(&e);
                         },
                     }
                 }

@@ -15,6 +15,8 @@ mod components;
 mod models;
 /// Centralized persistence helpers.
 mod persistence;
+/// Canvas API - platform-agnostic canvas operations
+mod canvas_api;
 /// Define a views module that contains the UI for all Layouts and Routes for our app.
 mod views;
 

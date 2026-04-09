@@ -12,7 +12,7 @@ title = "Data Viewer"
 style = []
 
 # Additional JavaScript files
-script = []
+script = ["assets/canvas-api.js"]
 
 [web.resource.dev]
 
