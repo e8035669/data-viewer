@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::components::{
     aspect_ratio::AspectRatio,
     button::{Button, ButtonVariant},
@@ -5,6 +7,7 @@ use crate::components::{
     scroll_area::ScrollArea,
     toolbar::{Toolbar, ToolbarButton, ToolbarGroup},
 };
+use async_std::task::sleep;
 use base64::prelude::*;
 use dioxus::{
     html::{geometry::ElementPoint, input_data::MouseButton},
@@ -14,7 +17,7 @@ use dioxus::{
 };
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::scroll_area::ScrollDirection;
-use euclid::{point2, size2, Point2D};
+use euclid::{point2, size2, Point2D, Size2D};
 use indexmap::IndexMap;
 use web_sys::{
     wasm_bindgen::JsCast, CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement,
@@ -70,32 +73,60 @@ impl DrawProxy {
         Self {}
     }
 
-    async fn init(&self) {
-        let _ =
-            document::eval(r#"window.roiHandler.init("draw_roi_image", "draw_roi_canvas");"#).await;
+    async fn init(&self) -> bool {
+        let ret =
+            document::eval(r#"return window.roiHandler.init("draw_roi_image", "draw_roi_canvas")"#)
+                .await;
+        tracing::info!("proxy init {:?}", ret);
+        if let Ok(ret) = ret {
+            if let Some(ret) = ret.as_bool() {
+                return ret;
+            }
+        }
+        false
     }
 
     async fn set_scale(&self, scale: f64) {
-        let prog = format!("window.roiHandler.setScale({scale});");
+        let prog = format!("window.roiHandler.setScale({scale})");
         let _ = document::eval(&prog).await;
     }
 
     async fn set_offset(&self, x: f64, y: f64) {
-        let prog = format!("window.roiHandler.setOffset({x}, {y});");
+        let prog = format!("window.roiHandler.setOffset({x}, {y})");
         let _ = document::eval(&prog).await;
+        // tracing::info!("proxy set_offset");
     }
 
     async fn set_mouse(&self, x: f64, y: f64) {
-        let prog = format!("window.roiHandler.setMouse({x}, {y});");
+        let prog = format!("window.roiHandler.setMouse({x}, {y})");
         let _ = document::eval(&prog).await;
+        // tracing::info!("proxy set_mouse");
     }
 
     async fn clear_mouse(&self) {
-        let _ = document::eval("window.roiHandler.clearMouse();").await;
+        let _ = document::eval("window.roiHandler.clearMouse()").await;
+    }
+
+    async fn set_current_points(&self, current_points: Vec<Point2D<i32, Pixel>>) {
+        let mut vec_str = "[".to_string();
+        vec_str.push_str(
+            current_points
+                .iter()
+                .map(|v| format!("[{},{}]", v.x, v.y))
+                .collect::<Vec<_>>()
+                .join(",")
+                .as_str(),
+        );
+        vec_str.push(']');
+        let prog = format!(
+            r#"let tmp = {vec_str};
+               window.roiHandler.setCurrentPoints(tmp);"#
+        );
+        let _ = document::eval(&prog).await;
     }
 
     async fn redraw(&self) {
-        let _ = document::eval("window.roiHandler.redraw();").await;
+        let _ = document::eval("window.roiHandler.redraw()").await;
     }
 }
 
@@ -209,7 +240,7 @@ impl DrawContext {
     }
 
     fn redraw(&self, ctx: &CanvasRenderingContext2d) {
-        DrawContext::redraw0(self, ctx);
+        // DrawContext::redraw0(self, ctx);
     }
 
     fn redraw0(draw_ctx: &DrawContext, ctx: &CanvasRenderingContext2d) {
@@ -390,6 +421,7 @@ impl DrawContext {
 #[derive(Debug, Clone, Store)]
 struct DrawRoiContext {
     tool_ctx: ToolStatus,
+    draw_proxy: DrawProxy,
     draw_ctx: DrawContext,
     canvas_ctx: Option<CanvasRenderingContext2d>,
     canvas_ref: Option<HtmlCanvasElement>,
@@ -399,6 +431,7 @@ impl DrawRoiContext {
     fn new() -> Self {
         Self {
             tool_ctx: Default::default(),
+            draw_proxy: DrawProxy::new(),
             draw_ctx: DrawContext::new(),
             canvas_ctx: None,
             canvas_ref: None,
@@ -545,6 +578,16 @@ pub fn DrawRoiPage() -> Element {
         draw_ctx.read().redraw(&ctx);
     });
 
+    use_future(move || async move {
+        loop {
+            let ret = draw_roi_ctx().draw_proxy.init().await;
+            if ret {
+                break;
+            }
+            sleep(Duration::from_secs(2)).await;
+        }
+    });
+
     let on_file_input = move |e: FormEvent| async move {
         let files = e.files().clone();
         tracing::info!("Input files {:?}", files);
@@ -559,27 +602,71 @@ pub fn DrawRoiPage() -> Element {
         selected_file.set(img_str);
     };
 
-    let on_image_load = move |_| {
+    let on_image_load = move |_| async move {
         draw_ctx.write();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_proxy.redraw().await;
     };
 
     // 縮放：滑鼠滾輪 / 手機雙指捏合
-    let on_wheel = move |e: Event<WheelData>| {
+    let on_wheel = move |e: Event<WheelData>| async move {
         e.prevent_default();
         tracing::info!("on_wheel {:?}", e.data());
         let delta = e.delta().strip_units().y;
         draw_roi_ctx.draw_ctx().write().canvas_wheel(delta);
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        let scale = draw_ctx.scale;
+        let (x, y) = (draw_ctx.offset_x, draw_ctx.offset_y);
+        draw_proxy.set_offset(x, y).await;
+        draw_proxy.set_scale(scale).await;
+        match draw_ctx.mouse_canvas_xy {
+            Some((x, y)) => {
+                draw_proxy.set_mouse(x, y).await;
+            }
+            None => {
+                draw_proxy.clear_mouse().await;
+            }
+        }
+        draw_proxy.redraw().await;
     };
 
-    let on_mouse_move = move |e: MouseEvent| {
+    let on_mouse_move = move |e: MouseEvent| async move {
         e.prevent_default();
         draw_roi_ctx.write().canvas_move(&e);
+
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        match draw_ctx.mouse_canvas_xy {
+            Some((x, y)) => {
+                draw_proxy.set_mouse(x, y).await;
+            }
+            None => {
+                draw_proxy.clear_mouse().await;
+            }
+        }
+        draw_proxy
+            .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
+            .await;
+        draw_proxy.redraw().await;
     };
 
-    let on_mouse_leave = move |e: MouseEvent| {
+    let on_mouse_leave = move |e: MouseEvent| async move {
         e.prevent_default();
         tracing::info!("on_mouse_leave {:?}", e.data());
         draw_roi_ctx.write().canvas_leave(&e);
+
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        match draw_ctx.mouse_canvas_xy {
+            Some((x, y)) => {
+                draw_proxy.set_mouse(x, y).await;
+            }
+            None => {
+                draw_proxy.clear_mouse().await;
+            }
+        }
+        draw_proxy.redraw().await;
     };
 
     let on_mouse_down = move |e: MouseEvent| {
@@ -587,13 +674,24 @@ pub fn DrawRoiPage() -> Element {
         draw_roi_ctx.write().canvas_mouse_down(&e);
     };
 
-    let on_click = move |e: MouseEvent| {
+    let on_click = move |e: MouseEvent| async move {
         e.prevent_default();
         draw_roi_ctx.write().canvas_click(&e);
+
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_proxy.set_current_points(draw_ctx.current_points).await;
+        draw_proxy.redraw().await;
     };
-    let on_double_click = move |e: MouseEvent| {
+
+    let on_double_click = move |e: MouseEvent| async move {
         e.prevent_default();
         draw_roi_ctx.write().canvas_double_click(&e);
+
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_proxy.set_current_points(draw_ctx.current_points).await;
+        draw_proxy.redraw().await;
     };
 
     let on_touch_start = move |e: TouchEvent| {
