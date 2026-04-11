@@ -125,6 +125,56 @@ impl DrawProxy {
         let _ = document::eval(&prog).await;
     }
 
+    async fn add_drawed_roi(&self, name: String, points: Vec<Point2D<i32, Pixel>>) {
+        let mut vec_str = "[".to_string();
+        vec_str.push_str(
+            points
+                .iter()
+                .map(|v| format!("[{},{}]", v.x, v.y))
+                .collect::<Vec<_>>()
+                .join(",")
+                .as_str(),
+        );
+        vec_str.push(']');
+        let prog = format!(
+            r#"let tmp = {vec_str};
+               window.roiHandler.addDrawedRoi("{name}", tmp);"#
+        );
+        let _ = document::eval(&prog).await;
+    }
+
+    async fn replace_all_drawed_roi(
+        &self,
+        drawed_rois: IndexMap<String, Vec<Point2D<i32, Pixel>>>,
+    ) {
+        let mut prog = format!("window.roiHandler.clearDrawedRoi();");
+        for (name, roi) in drawed_rois.iter() {
+            let mut vec_str = "[".to_string();
+            vec_str.push_str(
+                roi.iter()
+                    .map(|v| format!("[{},{}]", v.x, v.y))
+                    .collect::<Vec<_>>()
+                    .join(",")
+                    .as_str(),
+            );
+            vec_str.push(']');
+            prog.push_str(
+                format!(r#"window.roiHandler.addDrawedRoi("{name}", {vec_str});"#).as_str(),
+            );
+        }
+        let _ = document::eval(&prog).await;
+    }
+
+    async fn set_highlight(&self, name: String) {
+        let prog = format!(r#"window.roiHandler.setHighlight("{name}")"#);
+        let _ = document::eval(&prog).await;
+    }
+
+    async fn clear_highlight(&self) {
+        let prog = format!(r#"window.roiHandler.clearHighlight()"#);
+        let _ = document::eval(&prog).await;
+    }
+
     async fn redraw(&self) {
         let _ = document::eval("window.roiHandler.redraw()").await;
     }
@@ -691,6 +741,9 @@ pub fn DrawRoiPage() -> Element {
         let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
         let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
         draw_proxy.set_current_points(draw_ctx.current_points).await;
+        draw_proxy
+            .replace_all_drawed_roi(draw_ctx.drawed_rois)
+            .await;
         draw_proxy.redraw().await;
     };
 
@@ -735,7 +788,13 @@ pub fn DrawRoiPage() -> Element {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
                             let k = k3.clone();
-                            draw_roi_ctx.draw_ctx().write().highlight_view(k);
+                            draw_roi_ctx.draw_ctx().write().highlight_view(k.clone());
+
+                            async move {
+                                let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                draw_proxy.set_highlight(k.clone()).await;
+                                draw_proxy.redraw().await;
+                            }
                         },
                         Icon { icon: fa_solid_icons::FaLightbulb }
                     }
@@ -746,7 +805,13 @@ pub fn DrawRoiPage() -> Element {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
                             let k = k.clone();
-                            draw_roi_ctx.draw_ctx().write().highlight_edit(k);
+                            draw_roi_ctx.draw_ctx().write().highlight_edit(k.clone());
+
+                            async move {
+                                let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                draw_proxy.set_highlight(k.clone()).await;
+                                draw_proxy.redraw().await;
+                            }
                         },
                         Icon { icon: fa_solid_icons::FaPencil }
                     }
@@ -757,6 +822,17 @@ pub fn DrawRoiPage() -> Element {
                         onclick: move |_| {
                             let k = k2.clone();
                             draw_roi_ctx.draw_ctx().write().remove_drawed_roi(&k);
+
+                            async move {
+                                let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+                                let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                draw_proxy.set_current_points(draw_ctx.current_points).await;
+                                draw_proxy
+                                    .replace_all_drawed_roi(draw_ctx.drawed_rois)
+                                    .await;
+                                draw_proxy.redraw().await;
+                            }
+
                         },
                         Icon { icon: fa_solid_icons::FaSquareMinus }
                     }
@@ -770,13 +846,6 @@ pub fn DrawRoiPage() -> Element {
     rsx! {
         p { "🚧施工中🚧" }
         script { src: canvas_api }
-
-        Button {
-            onclick: |_| async {
-                let _ = document::eval("window.roiHandler.helloworld();").await;
-            },
-            "TEST"
-        }
 
         img {
             id: "draw_roi_image",
@@ -833,27 +902,59 @@ pub fn DrawRoiPage() -> Element {
                             ToggleToolbarButton {
                                 index: 0usize,
                                 is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::View,
-                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::View),
+                                on_click: move || async move {
+                                    draw_roi_ctx.set_tool_mode(ToolMode::View);
+
+                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    draw_proxy.set_current_points(draw_ctx.current_points).await;
+                                    draw_proxy.clear_highlight().await;
+                                    draw_proxy.redraw().await;
+                                },
                                 Icon { icon: fa_solid_icons::FaHand }
                             }
                             ToggleToolbarButton {
                                 index: 1usize,
                                 is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Draw,
-                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::Draw),
+                                on_click: move || async move {
+                                    draw_roi_ctx.set_tool_mode(ToolMode::Draw);
+
+                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    draw_proxy.set_current_points(draw_ctx.current_points).await;
+                                    draw_proxy.clear_highlight().await;
+                                    draw_proxy.redraw().await;
+                                },
 
                                 Icon { icon: fa_solid_icons::FaSquarePlus }
                             }
                             ToggleToolbarButton {
                                 index: 2usize,
                                 is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Edit,
-                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::Edit),
+                                on_click: move || async move {
+                                    draw_roi_ctx.set_tool_mode(ToolMode::Edit);
+
+                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    draw_proxy.set_current_points(draw_ctx.current_points).await;
+                                    draw_proxy.clear_highlight().await;
+                                    draw_proxy.redraw().await;
+                                },
 
                                 Icon { icon: fa_solid_icons::FaPencil }
                             }
                             ToggleToolbarButton {
                                 index: 3usize,
                                 is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Delete,
-                                on_click: move || draw_roi_ctx.set_tool_mode(ToolMode::Delete),
+                                on_click: move || async move {
+                                    draw_roi_ctx.set_tool_mode(ToolMode::Delete);
+
+                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    draw_proxy.set_current_points(draw_ctx.current_points).await;
+                                    draw_proxy.clear_highlight().await;
+                                    draw_proxy.redraw().await;
+                                },
                                 Icon { icon: fa_solid_icons::FaSquareMinus }
                             }
                         }

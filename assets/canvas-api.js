@@ -10,6 +10,7 @@ const roiHandlerProto = {
     mouse: null,
     current_points: [],
     drawed_rois: new Map(),
+    highlight: null,
 
     init(imageId, canvasId) {
         const image = document.getElementById(imageId);
@@ -22,6 +23,7 @@ const roiHandlerProto = {
         this.offset = { x: 0, y: 0 };
         this.mouse = null;
         this.drawed_rois = new Map();
+        this.highlight = null;
         console.info("init", image, canvas);
         return true;
     },
@@ -50,7 +52,7 @@ const roiHandlerProto = {
         }
     },
 
-    clearCurrentPoints(points) {
+    clearCurrentPoints() {
         this.current_points = [];
     },
 
@@ -75,6 +77,14 @@ const roiHandlerProto = {
 
     clearDrawedRoi() {
         this.drawed_rois.clear();
+    },
+
+    setHighlight(name) {
+        this.highlight = name;
+    },
+
+    clearHighlight() {
+        this.highlight = null;
     },
 
     redraw() {
@@ -143,6 +153,38 @@ const roiHandlerProto = {
                 ctx.beginPath();
                 ctx.arc(x, y, 5.0, 0.0, Math.PI * 2);
                 ctx.fill();
+            }
+        }
+
+        if (this.highlight) {
+            let value = this.drawed_rois.get(this.highlight);
+            if (value) {
+                ctx.strokeStyle = "red";
+                ctx.fillStyle = "red";
+                ctx.lineWidth = 4.0;
+
+                ctx.beginPath();
+                for (let i = 0; i < value.length; i++) {
+                    let p = value[i];
+                    let x = p.x + this.offset.x;
+                    let y = p.y + this.offset.y;
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.closePath();
+                ctx.stroke();
+
+                for (let i = 0; i < value.length; i++) {
+                    let p = value[i];
+                    let x = p.x + this.offset.x;
+                    let y = p.y + this.offset.y;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 6.0, 0.0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
         }
 
