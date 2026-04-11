@@ -63,6 +63,43 @@ enum HightlightStatus {
 struct Pixel;
 
 #[derive(Debug, Clone)]
+struct DrawProxy;
+
+impl DrawProxy {
+    fn new() -> Self {
+        Self {}
+    }
+
+    async fn init(&self) {
+        let _ =
+            document::eval(r#"window.roiHandler.init("draw_roi_image", "draw_roi_canvas");"#).await;
+    }
+
+    async fn set_scale(&self, scale: f64) {
+        let prog = format!("window.roiHandler.setScale({scale});");
+        let _ = document::eval(&prog).await;
+    }
+
+    async fn set_offset(&self, x: f64, y: f64) {
+        let prog = format!("window.roiHandler.setOffset({x}, {y});");
+        let _ = document::eval(&prog).await;
+    }
+
+    async fn set_mouse(&self, x: f64, y: f64) {
+        let prog = format!("window.roiHandler.setMouse({x}, {y});");
+        let _ = document::eval(&prog).await;
+    }
+
+    async fn clear_mouse(&self) {
+        let _ = document::eval("window.roiHandler.clearMouse();").await;
+    }
+
+    async fn redraw(&self) {
+        let _ = document::eval("window.roiHandler.redraw();").await;
+    }
+}
+
+#[derive(Debug, Clone)]
 struct DrawContext {
     image: Option<HtmlImageElement>,
     canvas_height: f64,
@@ -630,9 +667,21 @@ pub fn DrawRoiPage() -> Element {
 
         }});
 
+    let canvas_api = asset!("/assets/canvas-api.js");
+
     rsx! {
         p { "🚧施工中🚧" }
+        script { src: canvas_api }
+
+        Button {
+            onclick: |_| async {
+                let _ = document::eval("window.roiHandler.helloworld();").await;
+            },
+            "TEST"
+        }
+
         img {
+            id: "draw_roi_image",
             class: "hidden",
             src: selected_file(),
             onload: on_image_load,
@@ -655,6 +704,7 @@ pub fn DrawRoiPage() -> Element {
 
                 AspectRatio { ratio: 16. / 9.,
                     canvas {
+                        id: "draw_roi_canvas",
                         class: "w-full h-full border",
                         width: 1920,
                         height: 1080,
@@ -668,11 +718,11 @@ pub fn DrawRoiPage() -> Element {
                         onmousemove: on_mouse_move,
                         onmouseleave: on_mouse_leave,
 
-                        onresize: move |e| {
+                        onresize: move |e| async move {
                             tracing::info!("canvas.onresize {:?}", e.data());
-                            draw_roi_ctx.draw_ctx().write().canvas_resize(&e);
+                            draw_roi_ctx.write().draw_ctx.canvas_resize(&e);
                         },
-                        onmounted: move |e| {
+                        onmounted: move |e| async move {
                             tracing::info!("canvas.onmounted");
                             draw_roi_ctx.write().canvas_mounted(&e);
                         },
@@ -772,65 +822,3 @@ fn ToggleToolbarButton(
         }
     }
 }
-
-// #[component]
-// fn DrawRoiPage() -> Element {
-//     let canvas_ref = use_signal(|| None::<HtmlCanvasElement>);
-//     let view = use_signal(|| ViewState {
-//         scale: 1.0,
-//         offset_x: 0.0,
-//         offset_y: 0.0,
-//     });
-//     let is_panning = use_signal(|| false);
-//     let last_pos = use_signal(|| (0.0, 0.0));
-
-//     // 縮放：滑鼠滾輪 / 手機雙指捏合
-//     let on_wheel = move |e: Event<WheelData>| {
-//         e.prevent_default();
-//         let delta = e.data.delta_y();
-//         let zoom_factor = if delta > 0.0 { 0.9 } else { 1.1 };
-
-//         view.update(|v| {
-//             v.scale = (v.scale * zoom_factor).clamp(0.1, 5.0);
-//         });
-//     };
-
-//     // 觸控：單指拖曳平移，雙指捏合縮放
-//     let on_touch_start = move |e: Event<TouchData>| {
-//         let touches = e.data.touches();
-//         match touches.len() {
-//             1 => {
-//                 // 單指：開始平移
-//                 let touch = touches.get(0).unwrap();
-//                 is_panning.set(true);
-//                 last_pos.set((touch.client_x() as f64, touch.client_y() as f64));
-//             }
-//             2 => { // 雙指：記錄初始距離（用於捏合縮放）
-//                  // 計算兩指距離，存起來...
-//             }
-//             _ => {}
-//         }
-//     };
-
-//     // 滑鼠：右鍵或中鍵拖曳平移，左鍵畫圖
-//     // 觸控：單指畫圖，雙指平移（或用按鈕切換模式）
-
-//     rsx! {
-//         div { class: "toolbar",
-//             button { onclick: move |_| view.set(ViewState { scale: 1.0, offset_x: 0.0, offset_y: 0.0 }),
-//                 "重置視圖"
-//             }
-//             span { "縮放: {view().scale:.1}x" }
-//         }
-
-//         canvas {
-//             width: "800",
-//             height: "600",
-//             onwheel: on_wheel,
-//             ontouchstart: on_touch_start,
-//             ontouchmove: ...,  // 處理捏合或拖曳
-//             ontouchend: move |_| is_panning.set(false),
-//             // ... 滑鼠事件
-//         }
-//     }
-// }
