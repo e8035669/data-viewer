@@ -25,7 +25,7 @@ const roiHandlerProto = {
         this.drawed_rois = new Map();
         this.highlight = null;
         console.info("init", image, canvas);
-        return true;
+        return !!(image && canvas && this.ctx);
     },
 
     setScale(scale) {
@@ -89,7 +89,9 @@ const roiHandlerProto = {
 
     redraw() {
         const { ctx } = this;
-        ctx.reset();
+        ctx.resetTransform();
+        ctx.clearRect(0, 0, 1920, 1080);
+        
         ctx.scale(this.scale, this.scale);
 
         if (this.image) {
@@ -208,4 +210,8 @@ const roiHandlerProto = {
 
 };
 
-window.roiHandler = Object.create(roiHandlerProto);
+window.roiHandlerProto = roiHandlerProto;
+
+// 由rust端建立物件
+// window.roiHandler = Object.create(roiHandlerProto);
+// console.log("Create roiHandler", window.roiHandler)
