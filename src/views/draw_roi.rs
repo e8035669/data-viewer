@@ -18,6 +18,7 @@ use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::scroll_area::ScrollDirection;
 use euclid::{point2, size2, Point2D};
 use indexmap::IndexMap;
+use time::{OffsetDateTime, PrimitiveDateTime, Time};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolMode {
@@ -34,6 +35,9 @@ struct ToolStatus {
     mouse_down_pos: Option<(f64, f64)>,
     last_mouse_pos: Option<(f64, f64)>,
     is_dragging: bool,
+
+    last_pointer_pos: IndexMap<i32, (f64, f64)>,
+    last_click_time: Option<OffsetDateTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -421,6 +425,77 @@ impl DrawRoiContext {
             self.draw_ctx.close_current_roi();
         }
     }
+
+    fn canvas_pointer_down(&mut self, e: &PointerEvent) {
+        let tool_ctx = &mut self.tool_ctx;
+        let xy = e.element_coordinates();
+        tool_ctx
+            .last_pointer_pos
+            .insert(e.pointer_id(), (xy.x, xy.y));
+    }
+
+    fn canvas_pointer_move(&mut self, e: &PointerEvent) {
+        let tool_ctx = &mut self.tool_ctx;
+        let current_mode = tool_ctx.mode;
+        let xy = e.element_coordinates();
+        let movement = if let Some(last_pos) = tool_ctx.last_pointer_pos.get(&e.pointer_id()) {
+            (xy.x - last_pos.0, xy.y - last_pos.1)
+        } else {
+            (0.0, 0.0)
+        };
+
+        tool_ctx
+            .last_pointer_pos
+            .insert(e.pointer_id(), (xy.x, xy.y));
+
+        let first_id = tool_ctx.last_pointer_pos.first().unwrap().0.clone();
+
+        if first_id == e.pointer_id() {
+            self.update_mouse_xy(&xy);
+
+            if e.held_buttons().contains(MouseButton::Primary) && current_mode != ToolMode::Draw {
+                let move_canvas_xy = self.draw_ctx.to_canvas_pos(movement.0, movement.1);
+                self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
+            }
+            self.tool_ctx.last_mouse_pos = Some((xy.x, xy.y));
+        }
+    }
+
+    fn canvas_pointer_up(&mut self, e: &PointerEvent) {
+        let tool_ctx = &mut self.tool_ctx;
+        let first_id = tool_ctx.last_pointer_pos.first().unwrap().0.clone();
+        if first_id == e.pointer_id() {
+            if tool_ctx.mode == ToolMode::Draw {
+                // 新增一個點
+                self.draw_ctx.add_point();
+
+                let now = OffsetDateTime::now_utc();
+                if let Some(last_click_time) = tool_ctx.last_click_time {
+                    if now - last_click_time < time::Duration::milliseconds(500) {
+                        // 觸發雙擊
+                        self.draw_ctx.pop_last_point(2);
+                        self.draw_ctx.close_current_roi();
+                    }
+                }
+
+                tool_ctx.last_click_time = Some(OffsetDateTime::now_utc());
+            }
+        }
+    }
+
+    fn canvas_pointer_cancel(&mut self, e: &PointerEvent) {
+        let tool_ctx = &mut self.tool_ctx;
+        tool_ctx.last_pointer_pos.shift_remove(&e.pointer_id());
+        self.draw_ctx.mouse_leave();
+        self.tool_ctx.last_mouse_pos = None;
+    }
+
+    fn canvas_pointer_leave(&mut self, e: &PointerEvent) {
+        let tool_ctx = &mut self.tool_ctx;
+        tool_ctx.last_pointer_pos.shift_remove(&e.pointer_id());
+        self.draw_ctx.mouse_leave();
+        self.tool_ctx.last_mouse_pos = None;
+    }
 }
 
 #[store]
@@ -428,7 +503,7 @@ impl<Lens> Store<DrawRoiContext, Lens> {
     fn set_tool_mode(&mut self, mode: ToolMode) {
         match mode {
             ToolMode::View => {
-                self.draw_ctx().write().current_points.clear();
+                // self.draw_ctx().write().current_points.clear();
             }
             ToolMode::Draw => {}
             ToolMode::Edit => {}
@@ -589,19 +664,97 @@ pub fn DrawRoiPage() -> Element {
         draw_proxy.redraw().await;
     };
 
-    let on_touch_start = move |e: TouchEvent| {
+    let on_pointer_down = move |e: PointerEvent| async move {
         e.prevent_default();
-        tracing::info!("on_touch_start {:?}", e.data());
+        tracing::info!("on_pointer_down {:?}", e);
+        draw_roi_ctx.write().canvas_pointer_down(&e);
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        match draw_ctx.mouse_canvas_xy {
+            Some((x, y)) => {
+                draw_proxy.set_mouse(x, y).await;
+            }
+            None => {
+                draw_proxy.clear_mouse().await;
+            }
+        }
+        draw_proxy
+            .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
+            .await;
+        draw_proxy.redraw().await;
     };
 
-    let on_touch_move = move |e: TouchEvent| {
+    let on_pointer_move = move |e: PointerEvent| async move {
         e.prevent_default();
-        tracing::info!("on_touch_move {:?}", e.data());
+        tracing::info!("on_pointer_move {:?}", e);
+        draw_roi_ctx.write().canvas_pointer_move(&e);
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        match draw_ctx.mouse_canvas_xy {
+            Some((x, y)) => {
+                draw_proxy.set_mouse(x, y).await;
+            }
+            None => {
+                draw_proxy.clear_mouse().await;
+            }
+        }
+        draw_proxy
+            .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
+            .await;
+        draw_proxy.redraw().await;
     };
 
-    let on_touch_end = move |e: TouchEvent| {
+    let on_pointer_up = move |e: PointerEvent| async move {
         e.prevent_default();
-        tracing::info!("on_touch_end {:?}", e.data());
+        tracing::info!("on_pointer_up {:?}", e);
+        draw_roi_ctx.write().canvas_pointer_up(&e);
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_proxy.set_current_points(draw_ctx.current_points).await;
+        draw_proxy
+            .replace_all_drawed_roi(draw_ctx.drawed_rois)
+            .await;
+        draw_proxy.redraw().await;
+    };
+
+    let on_pointer_cancel = move |e: PointerEvent| async move {
+        e.prevent_default();
+        tracing::info!("on_pointer_cancel {:?}", e);
+        draw_roi_ctx.write().canvas_pointer_cancel(&e);
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        match draw_ctx.mouse_canvas_xy {
+            Some((x, y)) => {
+                draw_proxy.set_mouse(x, y).await;
+            }
+            None => {
+                draw_proxy.clear_mouse().await;
+            }
+        }
+        draw_proxy
+            .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
+            .await;
+        draw_proxy.redraw().await;
+    };
+
+    let on_pointer_leave = move |e: PointerEvent| async move {
+        e.prevent_default();
+        tracing::info!("on_pointer_leave {:?}", e);
+        draw_roi_ctx.write().canvas_pointer_leave(&e);
+        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
+        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        match draw_ctx.mouse_canvas_xy {
+            Some((x, y)) => {
+                draw_proxy.set_mouse(x, y).await;
+            }
+            None => {
+                draw_proxy.clear_mouse().await;
+            }
+        }
+        draw_proxy
+            .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
+            .await;
+        draw_proxy.redraw().await;
     };
 
     let drawed_rois = draw_ctx.read().get_drawed_rois();
@@ -705,18 +858,20 @@ pub fn DrawRoiPage() -> Element {
                 AspectRatio { ratio: 16. / 9.,
                     canvas {
                         id: "draw_roi_canvas",
-                        class: "w-full h-full border",
+                        class: "w-full h-full border touch-none",
                         width: 1920,
                         height: 1080,
-                        ontouchstart: on_touch_start,
-                        ontouchmove: on_touch_move,
-                        ontouchend: on_touch_end,
-                        onclick: on_click,
-                        ondoubleclick: on_double_click,
+                        // onclick: on_click,
+                        // ondoubleclick: on_double_click,
                         onwheel: on_wheel,
-                        onmousedown: on_mouse_down,
-                        onmousemove: on_mouse_move,
-                        onmouseleave: on_mouse_leave,
+                        // onmousedown: on_mouse_down,
+                        // onmousemove: on_mouse_move,
+                        // onmouseleave: on_mouse_leave,
+                        onpointerdown: on_pointer_down,
+                        onpointermove: on_pointer_move,
+                        onpointerup: on_pointer_up,
+                        onpointercancel: on_pointer_cancel,
+                        onpointerleave: on_pointer_leave,
 
                         onresize: move |e| async move {
                             tracing::info!("canvas.onresize {:?}", e.data());
