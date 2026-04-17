@@ -334,33 +334,43 @@ impl DrawContext {
     }
 }
 
-#[derive(Debug, Clone, Store)]
+fn use_draw_roi_context() -> DrawRoiContext {
+    let tool_ctx = use_signal(|| ToolStatus::default());
+    let draw_proxy = use_signal(|| DrawProxy::new());
+    let draw_ctx = use_signal(|| DrawContext::new());
+    return DrawRoiContext {
+        tool_ctx,
+        draw_proxy,
+        draw_ctx,
+    };
+}
+
+#[derive(Debug, Clone, Copy)]
 struct DrawRoiContext {
-    tool_ctx: ToolStatus,
-    draw_proxy: DrawProxy,
-    draw_ctx: DrawContext,
+    tool_ctx: Signal<ToolStatus>,
+    draw_proxy: Signal<DrawProxy>,
+    draw_ctx: Signal<DrawContext>,
 }
 
 impl DrawRoiContext {
-    fn new() -> Self {
-        Self {
-            tool_ctx: Default::default(),
-            draw_proxy: DrawProxy::new(),
-            draw_ctx: DrawContext::new(),
-        }
+    fn update_mouse_xy(&self, xy: &ElementPoint) {
+        let mut draw_ctx = self.draw_ctx;
+        draw_ctx.write().update_mouse_xy(xy.x, xy.y);
     }
 
-    fn update_mouse_xy(&mut self, xy: &ElementPoint) {
-        self.draw_ctx.update_mouse_xy(xy.x, xy.y);
+    fn add_offset_xy(&self, x: f64, y: f64) {
+        let mut draw_ctx = self.draw_ctx;
+        draw_ctx.write().add_offset_xy(x, y);
     }
 
-    fn add_offset_xy(&mut self, x: f64, y: f64) {
-        self.draw_ctx.add_offset_xy(x, y);
-    }
-
-    fn canvas_move(&mut self, e: &MouseEvent) {
+    fn canvas_move(&self, e: &MouseEvent) {
+        let DrawRoiContext {
+            mut tool_ctx,
+            draw_ctx,
+            ..
+        } = *self;
         let xy = e.element_coordinates();
-        let movement = if let Some(last_pos) = self.tool_ctx.last_mouse_pos {
+        let movement = if let Some(last_pos) = tool_ctx.read().last_mouse_pos {
             (xy.x - last_pos.0, xy.y - last_pos.1)
         } else {
             (0.0, 0.0)
@@ -370,36 +380,44 @@ impl DrawRoiContext {
 
         if e.held_buttons().contains(MouseButton::Primary) {
             // 偵測是否發生了足夠的拖曳（超過 5 像素閾值）
-            if let Some((down_x, down_y)) = &self.tool_ctx.mouse_down_pos {
+            if let Some((down_x, down_y)) = tool_ctx().mouse_down_pos {
                 let dx = xy.x - down_x;
                 let dy = xy.y - down_y;
                 let distance = (dx * dx + dy * dy).sqrt();
                 if distance > 5.0 {
-                    self.tool_ctx.is_dragging = true;
+                    tool_ctx.write().is_dragging = true;
                 }
             }
 
-            let move_canvas_xy = self.draw_ctx.to_canvas_pos(movement.0, movement.1);
+            let move_canvas_xy = draw_ctx.read().to_canvas_pos(movement.0, movement.1);
             self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
         }
-        self.tool_ctx.last_mouse_pos = Some((xy.x, xy.y));
+        tool_ctx.write().last_mouse_pos = Some((xy.x, xy.y));
     }
 
-    fn canvas_leave(&mut self, _e: &MouseEvent) {
-        self.draw_ctx.mouse_leave();
-        self.tool_ctx.last_mouse_pos = None;
+    fn canvas_leave(&self, _e: &MouseEvent) {
+        let DrawRoiContext {
+            mut tool_ctx,
+            mut draw_ctx,
+            ..
+        } = *self;
+        draw_ctx.write().mouse_leave();
+        tool_ctx.write().last_mouse_pos = None;
     }
 
-    fn canvas_mouse_down(&mut self, e: &MouseEvent) {
+    fn canvas_mouse_down(&self, e: &MouseEvent) {
         let xy = e.element_coordinates();
-        let tool_ctx = &mut self.tool_ctx;
-        tool_ctx.mouse_down_pos = Some((xy.x, xy.y));
-        tool_ctx.is_dragging = false;
-        tracing::info!("on_mouse_down at {:?}", tool_ctx.mouse_down_pos);
+        let mut tool_ctx = self.tool_ctx;
+        tool_ctx.with_mut(move |tool_ctx| {
+            tool_ctx.mouse_down_pos = Some((xy.x, xy.y));
+            tool_ctx.is_dragging = false;
+        });
+        tracing::info!("on_mouse_down at {:?}", tool_ctx.read().mouse_down_pos);
     }
 
-    fn canvas_click(&mut self, _e: &MouseEvent) {
-        let tool_ctx = &mut self.tool_ctx;
+    fn canvas_click(&self, _e: &MouseEvent) {
+        let mut tool_ctx = self.tool_ctx;
+        let mut tool_ctx = tool_ctx.write();
 
         // 只有在沒有拖曳時才認為是有效的點擊
         if tool_ctx.is_dragging {
@@ -408,34 +426,41 @@ impl DrawRoiContext {
             return;
         }
         tool_ctx.mouse_down_pos = None;
-        if self.tool_ctx.mode == ToolMode::Draw {
-            self.draw_ctx.add_point();
+
+        if tool_ctx.mode == ToolMode::Draw {
+            let mut draw_ctx = self.draw_ctx;
+            draw_ctx.write().add_point();
         }
     }
 
-    fn canvas_double_click(&mut self, _e: &MouseEvent) {
-        let tool_ctx = &mut self.tool_ctx;
+    fn canvas_double_click(&self, _e: &MouseEvent) {
+        let mut tool_ctx = self.tool_ctx;
+        let mut tool_ctx = tool_ctx.write();
 
         tool_ctx.mouse_down_pos = None;
         tool_ctx.is_dragging = false;
 
-        if self.tool_ctx.mode == ToolMode::Draw {
+        if tool_ctx.mode == ToolMode::Draw {
             // 雙擊之前會有兩次單擊，要刪掉
-            self.draw_ctx.pop_last_point(2);
-            self.draw_ctx.close_current_roi();
+            let mut draw_ctx = self.draw_ctx;
+            let mut draw_ctx = draw_ctx.write();
+            draw_ctx.pop_last_point(2);
+            draw_ctx.close_current_roi();
         }
     }
 
-    fn canvas_pointer_down(&mut self, e: &PointerEvent) {
-        let tool_ctx = &mut self.tool_ctx;
+    fn canvas_pointer_down(&self, e: &PointerEvent) {
+        let mut tool_ctx = self.tool_ctx;
         let xy = e.element_coordinates();
         tool_ctx
+            .write()
             .last_pointer_pos
             .insert(e.pointer_id(), (xy.x, xy.y));
     }
 
-    fn canvas_pointer_move(&mut self, e: &PointerEvent) {
-        let tool_ctx = &mut self.tool_ctx;
+    fn canvas_pointer_move(&self, e: &PointerEvent) {
+        let mut tool_ctx = self.tool_ctx;
+        let mut tool_ctx = tool_ctx.write();
         let current_mode = tool_ctx.mode;
         let xy = e.element_coordinates();
         let movement = if let Some(last_pos) = tool_ctx.last_pointer_pos.get(&e.pointer_id()) {
@@ -450,31 +475,38 @@ impl DrawRoiContext {
 
         let first_id = tool_ctx.last_pointer_pos.first().unwrap().0.clone();
 
+        drop(tool_ctx);
+
         if first_id == e.pointer_id() {
             self.update_mouse_xy(&xy);
 
             if e.held_buttons().contains(MouseButton::Primary) && current_mode != ToolMode::Draw {
-                let move_canvas_xy = self.draw_ctx.to_canvas_pos(movement.0, movement.1);
+                let draw_ctx = self.draw_ctx;
+                let move_canvas_xy = draw_ctx.read().to_canvas_pos(movement.0, movement.1);
                 self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
             }
-            self.tool_ctx.last_mouse_pos = Some((xy.x, xy.y));
+            let mut tool_ctx = self.tool_ctx;
+            tool_ctx.write().last_mouse_pos = Some((xy.x, xy.y));
         }
     }
 
-    fn canvas_pointer_up(&mut self, e: &PointerEvent) {
-        let tool_ctx = &mut self.tool_ctx;
+    fn canvas_pointer_up(&self, e: &PointerEvent) {
+        let mut tool_ctx = self.tool_ctx;
+        let mut tool_ctx = tool_ctx.write();
         let first_id = tool_ctx.last_pointer_pos.first().unwrap().0.clone();
         if first_id == e.pointer_id() {
             if tool_ctx.mode == ToolMode::Draw {
                 // 新增一個點
-                self.draw_ctx.add_point();
+                let mut draw_ctx = self.draw_ctx;
+                let mut draw_ctx = draw_ctx.write();
+                draw_ctx.add_point();
 
                 let now = OffsetDateTime::now_utc();
                 if let Some(last_click_time) = tool_ctx.last_click_time {
                     if now - last_click_time < time::Duration::milliseconds(500) {
                         // 觸發雙擊
-                        self.draw_ctx.pop_last_point(2);
-                        self.draw_ctx.close_current_roi();
+                        draw_ctx.pop_last_point(2);
+                        draw_ctx.close_current_roi();
                     }
                 }
 
@@ -483,24 +515,32 @@ impl DrawRoiContext {
         }
     }
 
-    fn canvas_pointer_cancel(&mut self, e: &PointerEvent) {
-        let tool_ctx = &mut self.tool_ctx;
+    fn canvas_pointer_cancel(&self, e: &PointerEvent) {
+        let mut tool_ctx = self.tool_ctx;
+        let mut tool_ctx = tool_ctx.write();
+        let mut draw_ctx = self.draw_ctx;
+        let mut draw_ctx = draw_ctx.write();
         tool_ctx.last_pointer_pos.shift_remove(&e.pointer_id());
-        self.draw_ctx.mouse_leave();
-        self.tool_ctx.last_mouse_pos = None;
+        draw_ctx.mouse_leave();
+        tool_ctx.last_mouse_pos = None;
     }
 
-    fn canvas_pointer_leave(&mut self, e: &PointerEvent) {
-        let tool_ctx = &mut self.tool_ctx;
+    fn canvas_pointer_leave(&self, e: &PointerEvent) {
+        let mut tool_ctx = self.tool_ctx;
+        let mut tool_ctx = tool_ctx.write();
+        let mut draw_ctx = self.draw_ctx;
+        let mut draw_ctx = draw_ctx.write();
         tool_ctx.last_pointer_pos.shift_remove(&e.pointer_id());
-        self.draw_ctx.mouse_leave();
-        self.tool_ctx.last_mouse_pos = None;
+        draw_ctx.mouse_leave();
+        tool_ctx.last_mouse_pos = None;
     }
-}
 
-#[store]
-impl<Lens> Store<DrawRoiContext, Lens> {
-    fn set_tool_mode(&mut self, mode: ToolMode) {
+    fn set_tool_mode(&self, mode: ToolMode) {
+        let DrawRoiContext {
+            mut tool_ctx,
+            mut draw_ctx,
+            ..
+        } = *self;
         match mode {
             ToolMode::View => {
                 // self.draw_ctx().write().current_points.clear();
@@ -509,8 +549,8 @@ impl<Lens> Store<DrawRoiContext, Lens> {
             ToolMode::Edit => {}
             ToolMode::Delete => {}
         }
-        self.draw_ctx().write().highlight_clear();
-        self.tool_ctx().mode().set(mode);
+        draw_ctx.write().highlight_clear();
+        tool_ctx.write().mode = mode;
     }
 }
 
@@ -542,8 +582,8 @@ fn rois_to_string(rois: &IndexMap<String, Vec<Point2D<i32, Pixel>>>) -> String {
 pub fn DrawRoiPage() -> Element {
     let mut selected_file = use_signal(|| String::new());
 
-    let mut draw_roi_ctx = use_store(|| DrawRoiContext::new());
-    let mut draw_ctx = draw_roi_ctx.draw_ctx();
+    let mut draw_roi_ctx = use_draw_roi_context();
+    let mut draw_ctx = draw_roi_ctx.draw_ctx;
 
     // use_future(move || async move {
     //     loop {
@@ -571,8 +611,8 @@ pub fn DrawRoiPage() -> Element {
 
     let on_image_load = move |_| async move {
         draw_ctx.write();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
-        draw_proxy.redraw().await;
+        let draw_proxy = draw_roi_ctx.draw_proxy;
+        draw_proxy().redraw().await;
     };
 
     // 縮放：滑鼠滾輪 / 手機雙指捏合
@@ -580,30 +620,39 @@ pub fn DrawRoiPage() -> Element {
         e.prevent_default();
         tracing::info!("on_wheel {:?}", e.data());
         let delta = e.delta().strip_units().y;
-        draw_roi_ctx.draw_ctx().write().canvas_wheel(delta);
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            mut draw_ctx,
+        } = draw_roi_ctx;
+        draw_ctx.write().canvas_wheel(delta);
+        let draw_ctx = draw_ctx();
         let scale = draw_ctx.scale;
         let (x, y) = (draw_ctx.offset_x, draw_ctx.offset_y);
-        draw_proxy.set_offset(x, y).await;
-        draw_proxy.set_scale(scale).await;
+        draw_proxy().set_offset(x, y).await;
+        draw_proxy().set_scale(scale).await;
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
-                draw_proxy.set_mouse(x, y).await;
+                draw_proxy().set_mouse(x, y).await;
             }
             None => {
-                draw_proxy.clear_mouse().await;
+                draw_proxy().clear_mouse().await;
             }
         }
-        draw_proxy.redraw().await;
+        draw_proxy().redraw().await;
     };
 
     let on_mouse_move = move |e: MouseEvent| async move {
         e.prevent_default();
-        draw_roi_ctx.write().canvas_move(&e);
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        draw_roi_ctx.canvas_move(&e);
 
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
                 draw_proxy.set_mouse(x, y).await;
@@ -621,10 +670,15 @@ pub fn DrawRoiPage() -> Element {
     let on_mouse_leave = move |e: MouseEvent| async move {
         e.prevent_default();
         tracing::info!("on_mouse_leave {:?}", e.data());
-        draw_roi_ctx.write().canvas_leave(&e);
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        draw_roi_ctx.canvas_leave(&e);
 
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
                 draw_proxy.set_mouse(x, y).await;
@@ -638,25 +692,35 @@ pub fn DrawRoiPage() -> Element {
 
     let on_mouse_down = move |e: MouseEvent| {
         e.prevent_default();
-        draw_roi_ctx.write().canvas_mouse_down(&e);
+        draw_roi_ctx.canvas_mouse_down(&e);
     };
 
     let on_click = move |e: MouseEvent| async move {
         e.prevent_default();
-        draw_roi_ctx.write().canvas_click(&e);
+        draw_roi_ctx.canvas_click(&e);
 
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         draw_proxy.set_current_points(draw_ctx.current_points).await;
         draw_proxy.redraw().await;
     };
 
     let on_double_click = move |e: MouseEvent| async move {
         e.prevent_default();
-        draw_roi_ctx.write().canvas_double_click(&e);
+        draw_roi_ctx.canvas_double_click(&e);
 
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         draw_proxy.set_current_points(draw_ctx.current_points).await;
         draw_proxy
             .replace_all_drawed_roi(draw_ctx.drawed_rois)
@@ -667,9 +731,15 @@ pub fn DrawRoiPage() -> Element {
     let on_pointer_down = move |e: PointerEvent| async move {
         e.prevent_default();
         tracing::info!("on_pointer_down {:?}", e);
-        draw_roi_ctx.write().canvas_pointer_down(&e);
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_roi_ctx.canvas_pointer_down(&e);
+
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
                 draw_proxy.set_mouse(x, y).await;
@@ -687,9 +757,15 @@ pub fn DrawRoiPage() -> Element {
     let on_pointer_move = move |e: PointerEvent| async move {
         e.prevent_default();
         tracing::info!("on_pointer_move {:?}", e);
-        draw_roi_ctx.write().canvas_pointer_move(&e);
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_roi_ctx.canvas_pointer_move(&e);
+
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
                 draw_proxy.set_mouse(x, y).await;
@@ -707,9 +783,14 @@ pub fn DrawRoiPage() -> Element {
     let on_pointer_up = move |e: PointerEvent| async move {
         e.prevent_default();
         tracing::info!("on_pointer_up {:?}", e);
-        draw_roi_ctx.write().canvas_pointer_up(&e);
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_roi_ctx.canvas_pointer_up(&e);
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         draw_proxy.set_current_points(draw_ctx.current_points).await;
         draw_proxy
             .replace_all_drawed_roi(draw_ctx.drawed_rois)
@@ -720,9 +801,14 @@ pub fn DrawRoiPage() -> Element {
     let on_pointer_cancel = move |e: PointerEvent| async move {
         e.prevent_default();
         tracing::info!("on_pointer_cancel {:?}", e);
-        draw_roi_ctx.write().canvas_pointer_cancel(&e);
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_roi_ctx.canvas_pointer_cancel(&e);
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
                 draw_proxy.set_mouse(x, y).await;
@@ -740,9 +826,14 @@ pub fn DrawRoiPage() -> Element {
     let on_pointer_leave = move |e: PointerEvent| async move {
         e.prevent_default();
         tracing::info!("on_pointer_leave {:?}", e);
-        draw_roi_ctx.write().canvas_pointer_leave(&e);
-        let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-        let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+        draw_roi_ctx.canvas_pointer_leave(&e);
+        let DrawRoiContext {
+            tool_ctx,
+            draw_proxy,
+            draw_ctx,
+        } = draw_roi_ctx;
+        let draw_ctx = draw_ctx();
+        let draw_proxy = draw_proxy();
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
                 draw_proxy.set_mouse(x, y).await;
@@ -778,49 +869,51 @@ pub fn DrawRoiPage() -> Element {
         rsx!{
             div { class: "flex", key: "ROI_{k}",
                 div { class: "flex-1", "{k}" }
-                div { class: if draw_roi_ctx.tool_ctx().mode() == ToolMode::View { "" } else { "hidden" },
+                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::View { "" } else { "hidden" },
                     Button {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
                             let k = k3.clone();
-                            draw_roi_ctx.draw_ctx().write().highlight_view(k.clone());
+                            draw_roi_ctx.draw_ctx.write().highlight_view(k.clone());
 
                             async move {
-                                let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
-                                draw_proxy.set_highlight(k.clone()).await;
-                                draw_proxy.redraw().await;
+                                let draw_proxy = draw_roi_ctx.draw_proxy;
+                                draw_proxy().set_highlight(k.clone()).await;
+                                draw_proxy().redraw().await;
                             }
                         },
                         Icon { icon: fa_solid_icons::FaLightbulb }
                     }
                 }
 
-                div { class: if draw_roi_ctx.tool_ctx().mode() == ToolMode::Edit { "" } else { "hidden" },
+                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::Edit { "" } else { "hidden" },
                     Button {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
                             let k = k.clone();
-                            draw_roi_ctx.draw_ctx().write().highlight_edit(k.clone());
+                            draw_roi_ctx.draw_ctx.write().highlight_edit(k.clone());
 
                             async move {
-                                let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
-                                draw_proxy.set_highlight(k.clone()).await;
-                                draw_proxy.redraw().await;
+                                let draw_proxy = draw_roi_ctx.draw_proxy;
+                                draw_proxy().set_highlight(k.clone()).await;
+                                draw_proxy().redraw().await;
                             }
                         },
                         Icon { icon: fa_solid_icons::FaPencil }
                     }
                 }
-                div { class: if draw_roi_ctx.tool_ctx().mode() == ToolMode::Delete { "" } else { "hidden" },
+                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::Delete { "" } else { "hidden" },
                     Button {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
                             let k = k2.clone();
-                            draw_roi_ctx.draw_ctx().write().remove_drawed_roi(&k);
+                            draw_roi_ctx.draw_ctx.write().remove_drawed_roi(&k);
 
                             async move {
-                                let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-                                let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+
+                                let DrawRoiContext { tool_ctx, draw_proxy, draw_ctx } = draw_roi_ctx;
+                                let draw_ctx = draw_ctx();
+                                let draw_proxy = draw_proxy();
                                 draw_proxy.set_current_points(draw_ctx.current_points).await;
                                 draw_proxy
                                     .replace_all_drawed_roi(draw_ctx.drawed_rois)
@@ -875,11 +968,12 @@ pub fn DrawRoiPage() -> Element {
 
                         onresize: move |e| async move {
                             tracing::info!("canvas.onresize {:?}", e.data());
-                            draw_roi_ctx.write().draw_ctx.canvas_resize(&e);
+                            draw_roi_ctx.draw_ctx.write().canvas_resize(&e);
                         },
                         onmounted: move |e| async move {
                             loop {
-                                let ret = draw_roi_ctx().draw_proxy.init().await;
+                                let draw_proxy = draw_roi_ctx.draw_proxy;
+                                let ret = draw_proxy().init().await;
                                 if ret {
                                     break;
                                 }
@@ -894,12 +988,13 @@ pub fn DrawRoiPage() -> Element {
                         ToolbarGroup {
                             ToggleToolbarButton {
                                 index: 0usize,
-                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::View,
+                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::View,
                                 on_click: move || async move {
                                     draw_roi_ctx.set_tool_mode(ToolMode::View);
 
-                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    let DrawRoiContext { tool_ctx, draw_proxy, draw_ctx } = draw_roi_ctx;
+                                    let draw_ctx = draw_ctx();
+                                    let draw_proxy = draw_proxy();
                                     draw_proxy.set_current_points(draw_ctx.current_points).await;
                                     draw_proxy.clear_highlight().await;
                                     draw_proxy.redraw().await;
@@ -908,12 +1003,13 @@ pub fn DrawRoiPage() -> Element {
                             }
                             ToggleToolbarButton {
                                 index: 1usize,
-                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Draw,
+                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Draw,
                                 on_click: move || async move {
                                     draw_roi_ctx.set_tool_mode(ToolMode::Draw);
 
-                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    let DrawRoiContext { tool_ctx, draw_proxy, draw_ctx } = draw_roi_ctx;
+                                    let draw_ctx = draw_ctx();
+                                    let draw_proxy = draw_proxy();
                                     draw_proxy.set_current_points(draw_ctx.current_points).await;
                                     draw_proxy.clear_highlight().await;
                                     draw_proxy.redraw().await;
@@ -923,12 +1019,13 @@ pub fn DrawRoiPage() -> Element {
                             }
                             ToggleToolbarButton {
                                 index: 2usize,
-                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Edit,
+                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Edit,
                                 on_click: move || async move {
                                     draw_roi_ctx.set_tool_mode(ToolMode::Edit);
 
-                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    let DrawRoiContext { tool_ctx, draw_proxy, draw_ctx } = draw_roi_ctx;
+                                    let draw_ctx = draw_ctx();
+                                    let draw_proxy = draw_proxy();
                                     draw_proxy.set_current_points(draw_ctx.current_points).await;
                                     draw_proxy.clear_highlight().await;
                                     draw_proxy.redraw().await;
@@ -938,12 +1035,13 @@ pub fn DrawRoiPage() -> Element {
                             }
                             ToggleToolbarButton {
                                 index: 3usize,
-                                is_on: draw_roi_ctx.tool_ctx().mode() == ToolMode::Delete,
+                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Delete,
                                 on_click: move || async move {
                                     draw_roi_ctx.set_tool_mode(ToolMode::Delete);
 
-                                    let draw_ctx = draw_roi_ctx.draw_ctx().read().cloned();
-                                    let draw_proxy = draw_roi_ctx.draw_proxy().read().cloned();
+                                    let DrawRoiContext { tool_ctx, draw_proxy, draw_ctx } = draw_roi_ctx;
+                                    let draw_ctx = draw_ctx();
+                                    let draw_proxy = draw_proxy();
                                     draw_proxy.set_current_points(draw_ctx.current_points).await;
                                     draw_proxy.clear_highlight().await;
                                     draw_proxy.redraw().await;
