@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{default, time::Duration};
 
 use crate::components::{
     aspect_ratio::AspectRatio,
@@ -10,14 +10,17 @@ use crate::components::{
 use async_std::task::sleep;
 use base64::prelude::*;
 use dioxus::{
-    html::{geometry::ElementPoint, input_data::MouseButton},
+    html::{
+        geometry::ElementPoint,
+        input_data::{MouseButton, MouseButtonSet},
+    },
     logger::tracing,
     prelude::*,
 };
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::scroll_area::ScrollDirection;
-use euclid::{point2, size2, Point2D};
-use indexmap::IndexMap;
+use euclid::{point2, size2, Point2D, UnknownUnit};
+use indexmap::{IndexMap, IndexSet};
 use time::{OffsetDateTime, PrimitiveDateTime, Time};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +32,15 @@ enum ToolMode {
     Delete,
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+enum GestureMode {
+    #[default]
+    None,
+    Drag,
+    Draw,
+    Zoom,
+}
+
 #[derive(Default, Debug, Clone, Store)]
 struct ToolStatus {
     mode: ToolMode,
@@ -37,7 +49,9 @@ struct ToolStatus {
     is_dragging: bool,
 
     last_pointer_pos: IndexMap<i32, (f64, f64)>,
+    primary_buttons: IndexSet<i32>,
     last_click_time: Option<OffsetDateTime>,
+    gesture: GestureMode,
 }
 
 impl ToolStatus {
@@ -49,12 +63,22 @@ impl ToolStatus {
         }
     }
 
-    fn update_last_pos(&mut self, pointer_id: i32, coord: (f64, f64)) {
+    fn update_last_pos(&mut self, pointer_id: i32, coord: (f64, f64), btn: MouseButtonSet) {
         self.last_pointer_pos.insert(pointer_id, coord);
+        if btn.contains(MouseButton::Primary) {
+            self.primary_buttons.insert(pointer_id);
+        } else {
+            self.primary_buttons.shift_remove(&pointer_id);
+        }
     }
 
     fn get_first_id(&self) -> Option<i32> {
         self.last_pointer_pos.first().map(|(k, _)| *k)
+    }
+
+    fn remove_pointer_id(&mut self, pointer_id: i32) {
+        self.last_pointer_pos.shift_remove(&pointer_id);
+        self.primary_buttons.shift_remove(&pointer_id);
     }
 }
 
@@ -200,6 +224,137 @@ impl DrawProxy {
     async fn redraw(&self) {
         let _ = document::eval("window.roiHandler.redraw()").await;
     }
+
+    async fn execute(&self, command: &str) {
+        let _ = document::eval(command).await;
+    }
+}
+
+struct DrawCommandBuilder {
+    commands: String,
+}
+
+impl DrawCommandBuilder {
+    fn new() -> Self {
+        Self {
+            commands: String::new(),
+        }
+    }
+
+    fn set_scale(&mut self, scale: f64) -> &mut Self {
+        let prog = format!("window.roiHandler.setScale({scale});");
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn set_offset(&mut self, x: f64, y: f64) -> &mut Self {
+        let prog = format!("window.roiHandler.setOffset({x}, {y});");
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn set_mouse(&mut self, x: f64, y: f64) -> &mut Self {
+        let prog = format!("window.roiHandler.setMouse({x}, {y});");
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn clear_mouse(&mut self) -> &mut Self {
+        let prog = "window.roiHandler.clearMouse();".to_string();
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn set_current_points(&mut self, current_points: Vec<Point2D<i32, Pixel>>) -> &mut Self {
+        let mut vec_str = "[".to_string();
+        vec_str.push_str(
+            current_points
+                .iter()
+                .map(|v| format!("[{},{}]", v.x, v.y))
+                .collect::<Vec<_>>()
+                .join(",")
+                .as_str(),
+        );
+        vec_str.push(']');
+        let prog = format!(
+            r#"let tmp = {vec_str};
+               window.roiHandler.setCurrentPoints(tmp);"#
+        );
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn add_drawed_roi(&mut self, name: String, points: Vec<Point2D<i32, Pixel>>) -> &mut Self {
+        let mut vec_str = "[".to_string();
+        vec_str.push_str(
+            points
+                .iter()
+                .map(|v| format!("[{},{}]", v.x, v.y))
+                .collect::<Vec<_>>()
+                .join(",")
+                .as_str(),
+        );
+        vec_str.push(']');
+        let prog = format!(
+            r#"let tmp = {vec_str};
+               window.roiHandler.addDrawedRoi("{name}", tmp);"#
+        );
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn replace_all_drawed_roi(
+        &mut self,
+        drawed_rois: IndexMap<String, Vec<Point2D<i32, Pixel>>>,
+    ) -> &mut Self {
+        let mut prog = format!("window.roiHandler.clearDrawedRoi();");
+        for (name, roi) in drawed_rois.iter() {
+            let mut vec_str = "[".to_string();
+            vec_str.push_str(
+                roi.iter()
+                    .map(|v| format!("[{},{}]", v.x, v.y))
+                    .collect::<Vec<_>>()
+                    .join(",")
+                    .as_str(),
+            );
+            vec_str.push(']');
+            prog.push_str(
+                format!(r#"window.roiHandler.addDrawedRoi("{name}", {vec_str});"#).as_str(),
+            );
+        }
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn set_highlight(&mut self, name: String) -> &mut Self {
+        let prog = format!(r#"window.roiHandler.setHighlight("{name}");"#);
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn clear_highlight(&mut self) -> &mut Self {
+        let prog = format!(r#"window.roiHandler.clearHighlight();"#);
+        self.commands.push_str(&prog);
+        self
+    }
+
+    fn redraw(&mut self) -> &mut Self {
+        let prog = "window.roiHandler.redraw();".to_string();
+        self.commands.push_str(&prog);
+        self
+    }
+
+    async fn execute(&self, draw_proxy: &DrawProxy) {
+        draw_proxy.execute(&self.commands).await;
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PinchBase {
+    mouse_center: (f64, f64),
+    image_center: (f64, f64),
+    display_distance: f64,
+    base_scale: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +372,7 @@ struct DrawContext {
     current_points: Vec<Point2D<i32, Pixel>>,
     highlight: HightlightStatus,
     next_roi_id: usize,
+    pinch_base: Option<PinchBase>,
 }
 
 impl DrawContext {
@@ -235,6 +391,7 @@ impl DrawContext {
             drawed_rois: IndexMap::new(),
             highlight: HightlightStatus::default(),
             next_roi_id: 0,
+            pinch_base: None,
         }
     }
 
@@ -323,6 +480,51 @@ impl DrawContext {
             self.offset_x = new_offset_xy.0;
             self.offset_y = new_offset_xy.1;
         }
+    }
+
+    fn set_pinch_base(&mut self, p1: (f64, f64), p2: (f64, f64)) {
+        let base_scale = self.scale;
+        let mouse_center = ((p1.0 + p2.0) / 2.0, (p1.1 + p2.1) / 2.0);
+        let canvas_center = self.to_canvas_pos(mouse_center.0, mouse_center.1);
+        let image_center = (
+            canvas_center.0 - self.offset_x,
+            canvas_center.1 - self.offset_y,
+        );
+
+        let pp1: Point2D<f64, Pixel> = point2(p1.0, p1.1);
+        let pp2: Point2D<f64, Pixel> = point2(p2.0, p2.1);
+        let display_distance = pp1.distance_to(pp2);
+
+        let pinch_base = PinchBase {
+            mouse_center,
+            image_center,
+            base_scale,
+            display_distance,
+        };
+        self.pinch_base = Some(pinch_base)
+    }
+
+    fn perform_pinch_zoom(&mut self, p1: (f64, f64), p2: (f64, f64)) {
+        let Some(pinch_base) = self.pinch_base else {
+            return;
+        };
+
+        let pp1: Point2D<_, Pixel> = point2(p1.0, p1.1);
+        let pp2: Point2D<_, Pixel> = point2(p2.0, p2.1);
+        let new_distance = pp1.distance_to(pp2);
+
+        let new_scale = new_distance * pinch_base.base_scale / pinch_base.display_distance;
+        let new_scale = new_scale.clamp(0.1, 5.0);
+
+        self.scale = new_scale;
+
+        let new_canvas_xy =
+            self.to_canvas_pos(pinch_base.mouse_center.0, pinch_base.mouse_center.1);
+        let image_xy = pinch_base.image_center;
+        let new_offset_xy = (new_canvas_xy.0 - image_xy.0, new_canvas_xy.1 - image_xy.1);
+        self.mouse_canvas_xy = Some(new_canvas_xy);
+        self.offset_x = new_offset_xy.0;
+        self.offset_y = new_offset_xy.1;
     }
 
     fn highlight_clear(&mut self) {
@@ -472,20 +674,22 @@ impl DrawRoiContext {
         let draw_ctx = draw_ctx();
         let draw_proxy = self.draw_proxy;
         let draw_proxy = draw_proxy();
+
+        let mut builder = DrawCommandBuilder::new();
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
-                draw_proxy.set_mouse(x, y).await;
+                builder.set_mouse(x, y);
             }
             None => {
-                draw_proxy.clear_mouse().await;
+                builder.clear_mouse();
             }
         }
-        draw_proxy
-            .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
-            .await;
+        builder.set_scale(draw_ctx.scale);
+        builder.set_offset(draw_ctx.offset_x, draw_ctx.offset_y);
         if redraw {
-            draw_proxy.redraw().await;
+            builder.redraw();
         }
+        builder.execute(&draw_proxy).await;
     }
 
     async fn sync_all_roi(&self, redraw: bool) {
@@ -496,57 +700,120 @@ impl DrawRoiContext {
         } = *self;
         let draw_ctx = draw_ctx();
         let draw_proxy = draw_proxy();
-        draw_proxy.set_current_points(draw_ctx.current_points).await;
-        draw_proxy
-            .replace_all_drawed_roi(draw_ctx.drawed_rois)
-            .await;
+
+        let mut builder = DrawCommandBuilder::new();
+        builder.set_current_points(draw_ctx.current_points);
+        builder.replace_all_drawed_roi(draw_ctx.drawed_rois);
         if redraw {
-            draw_proxy.redraw().await;
+            builder.redraw();
         }
+        builder.execute(&draw_proxy).await;
     }
 
     async fn canvas_pointer_down(&self, e: &PointerEvent) {
-        let DrawRoiContext { mut tool_ctx, .. } = *self;
+        let DrawRoiContext {
+            mut tool_ctx,
+            mut draw_ctx,
+            ..
+        } = *self;
         let xy = e.element_coordinates();
-        tool_ctx
-            .write()
-            .update_last_pos(e.pointer_id(), xy.to_tuple());
+
+        {
+            let mut tool_ctx = tool_ctx.write();
+            tool_ctx.update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
+            let clicked_ids = tool_ctx.primary_buttons.clone();
+            match clicked_ids.len() {
+                0 => {
+                    tool_ctx.gesture = GestureMode::None;
+                }
+                1 => {
+                    if tool_ctx.mode == ToolMode::Draw {
+                        tool_ctx.gesture = GestureMode::Draw;
+                    } else {
+                        tool_ctx.gesture = GestureMode::Drag;
+                    }
+                }
+                2 => {
+                    tool_ctx.gesture = GestureMode::Zoom;
+                    let p1 = tool_ctx
+                        .last_pointer_pos
+                        .get(&clicked_ids[0])
+                        .cloned()
+                        .unwrap();
+                    let p2 = tool_ctx
+                        .last_pointer_pos
+                        .get(&clicked_ids[1])
+                        .cloned()
+                        .unwrap();
+                    draw_ctx.write().set_pinch_base(p1, p2);
+                }
+                _ => {}
+            }
+        }
 
         self.sync_pos_offset(true).await;
     }
 
     async fn canvas_pointer_move(&self, e: &PointerEvent) {
         let mut tool_ctx = self.tool_ctx;
-        let current_mode = tool_ctx().mode;
+        let tool_ctx_copy = tool_ctx();
+        let current_mode = tool_ctx_copy.mode;
+        let current_gesture = tool_ctx_copy.gesture;
         let xy = e.element_coordinates();
         let movement = tool_ctx.read().get_movement(e.pointer_id(), xy.to_tuple());
         tool_ctx
             .write()
-            .update_last_pos(e.pointer_id(), xy.to_tuple());
+            .update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
 
         let first_id = tool_ctx.read().get_first_id().unwrap();
-
         if first_id == e.pointer_id() {
             self.update_mouse_xy(&xy);
-
-            if e.held_buttons().contains(MouseButton::Primary) && current_mode != ToolMode::Draw {
-                let draw_ctx = self.draw_ctx;
-                let move_canvas_xy = draw_ctx.read().to_canvas_pos(movement.0, movement.1);
-                self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
-            }
-            tool_ctx.write().last_mouse_pos = Some((xy.x, xy.y));
         }
+
+        match current_gesture {
+            GestureMode::Drag => {
+                if first_id == e.pointer_id() {
+                    let draw_ctx = self.draw_ctx;
+                    let move_canvas_xy = draw_ctx.read().to_canvas_pos(movement.0, movement.1);
+                    self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
+                }
+            }
+            GestureMode::Zoom => {
+                let tool_ctx_copy = tool_ctx();
+                let clicked_ids = tool_ctx_copy.primary_buttons.clone();
+                if clicked_ids.len() >= 2 {
+                    let p1 = tool_ctx_copy
+                        .last_pointer_pos
+                        .get(&clicked_ids[0])
+                        .cloned()
+                        .unwrap();
+                    let p2 = tool_ctx_copy
+                        .last_pointer_pos
+                        .get(&clicked_ids[1])
+                        .cloned()
+                        .unwrap();
+                    let mut draw_ctx = self.draw_ctx;
+                    draw_ctx.write().perform_pinch_zoom(p1, p2);
+                }
+            }
+            _ => {}
+        }
+
+        tool_ctx.write().last_mouse_pos = Some((xy.x, xy.y));
 
         self.sync_pos_offset(true).await;
     }
 
     async fn canvas_pointer_up(&self, e: &PointerEvent) {
+        let xy = e.element_coordinates();
         let mut tool_ctx = self.tool_ctx;
         {
             let mut tool_ctx = tool_ctx.write();
-            let first_id = tool_ctx.get_first_id().unwrap();
-            if first_id == e.pointer_id() {
-                if tool_ctx.mode == ToolMode::Draw {
+            tool_ctx.update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
+
+            if tool_ctx.gesture == GestureMode::Draw {
+                let first_id = tool_ctx.get_first_id().unwrap();
+                if first_id == e.pointer_id() {
                     // 新增一個點
                     let mut draw_ctx = self.draw_ctx;
                     let mut draw_ctx = draw_ctx.write();
@@ -564,6 +831,22 @@ impl DrawRoiContext {
                     tool_ctx.last_click_time = Some(OffsetDateTime::now_utc());
                 }
             }
+
+            match tool_ctx.primary_buttons.len() {
+                0 => {
+                    tool_ctx.gesture = GestureMode::None;
+                }
+                1 => {
+                    if tool_ctx.mode == ToolMode::Draw {
+                        tool_ctx.gesture = GestureMode::Draw;
+                    } else {
+                        tool_ctx.gesture = GestureMode::Drag;
+                    }
+                }
+                _ => {
+                    tool_ctx.gesture = GestureMode::Zoom;
+                }
+            }
         }
 
         self.sync_all_roi(true).await;
@@ -575,7 +858,7 @@ impl DrawRoiContext {
         {
             let mut tool_ctx = tool_ctx.write();
             let mut draw_ctx = draw_ctx.write();
-            tool_ctx.last_pointer_pos.shift_remove(&e.pointer_id());
+            tool_ctx.remove_pointer_id(e.pointer_id());
             draw_ctx.mouse_leave();
             tool_ctx.last_mouse_pos = None;
         }
@@ -589,7 +872,7 @@ impl DrawRoiContext {
         {
             let mut tool_ctx = tool_ctx.write();
             let mut draw_ctx = draw_ctx.write();
-            tool_ctx.last_pointer_pos.shift_remove(&e.pointer_id());
+            tool_ctx.remove_pointer_id(e.pointer_id());
             draw_ctx.mouse_leave();
             tool_ctx.last_mouse_pos = None;
         }
@@ -616,9 +899,13 @@ impl DrawRoiContext {
 
         let draw_ctx = draw_ctx();
         let draw_proxy = draw_proxy();
-        draw_proxy.set_current_points(draw_ctx.current_points).await;
-        draw_proxy.clear_highlight().await;
-        draw_proxy.redraw().await;
+
+        DrawCommandBuilder::new()
+            .set_current_points(draw_ctx.current_points)
+            .clear_highlight()
+            .redraw()
+            .execute(&draw_proxy)
+            .await;
     }
 
     async fn remove_drawed_roi(&self, name: &str) {
@@ -633,8 +920,12 @@ impl DrawRoiContext {
         draw_ctx.write().highlight_view(name.to_string());
 
         let draw_proxy = self.draw_proxy;
-        draw_proxy().set_highlight(name.to_string()).await;
-        draw_proxy().redraw().await;
+        let draw_proxy = draw_proxy();
+        DrawCommandBuilder::new()
+            .set_highlight(name.to_string())
+            .redraw()
+            .execute(&draw_proxy)
+            .await;
     }
 
     async fn highlight_edit(&self, name: &str) {
@@ -642,8 +933,12 @@ impl DrawRoiContext {
         draw_ctx.write().highlight_edit(name.to_string());
 
         let draw_proxy = self.draw_proxy;
-        draw_proxy().set_highlight(name.to_string()).await;
-        draw_proxy().redraw().await;
+        let draw_proxy = draw_proxy();
+        DrawCommandBuilder::new()
+            .set_highlight(name.to_string())
+            .redraw()
+            .execute(&draw_proxy)
+            .await;
     }
 }
 
@@ -719,20 +1014,23 @@ pub fn DrawRoiPage() -> Element {
             mut draw_ctx,
         } = draw_roi_ctx;
         draw_ctx.write().canvas_wheel(delta);
+
         let draw_ctx = draw_ctx();
         let scale = draw_ctx.scale;
         let (x, y) = (draw_ctx.offset_x, draw_ctx.offset_y);
-        draw_proxy().set_offset(x, y).await;
-        draw_proxy().set_scale(scale).await;
+        let mut builder = DrawCommandBuilder::new();
+        builder.set_offset(x, y);
+        builder.set_scale(scale);
         match draw_ctx.mouse_canvas_xy {
             Some((x, y)) => {
-                draw_proxy().set_mouse(x, y).await;
+                builder.set_mouse(x, y);
             }
             None => {
-                draw_proxy().clear_mouse().await;
+                builder.clear_mouse();
             }
         }
-        draw_proxy().redraw().await;
+        builder.redraw();
+        builder.execute(&draw_proxy()).await;
     };
 
     let on_mouse_move = move |e: MouseEvent| async move {
