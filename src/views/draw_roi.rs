@@ -120,7 +120,7 @@ impl DrawProxy {
         let ret = document::eval(
             r#"
             window.roiHandler = Object.create(window.roiHandlerProto);
-            return window.roiHandler.init("draw_roi_image", "draw_roi_canvas");"#,
+            return window.roiHandler.init("draw_roi_image", "draw_roi_canvas", "magnifier_canvas");"#,
         )
         .await;
         tracing::info!("proxy init {:?}", ret);
@@ -1227,6 +1227,10 @@ pub fn DrawRoiPage() -> Element {
         div { class: "grid grid-cols-1 gap-2",
 
             Input { r#type: "file", accept: "image/*", oninput: on_file_input }
+
+            div {
+                canvas { id: "magnifier_canvas", width: 200, height: 200 }
+            }
 
             div { class: "grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-start",
 

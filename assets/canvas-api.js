@@ -5,6 +5,10 @@ const roiHandlerProto = {
     /** @type {CanvasRenderingContext2D} */
     ctx: null,
 
+    magnifier_canvas: null,
+    /** @type {CanvasRenderingContext2D} */
+    magnifier_ctx: null,
+
     scale: 1.0,
     offset: { x: 0, y: 0 },
     mouse: null,
@@ -12,7 +16,7 @@ const roiHandlerProto = {
     drawed_rois: new Map(),
     highlight: null,
 
-    init(imageId, canvasId) {
+    init(imageId, canvasId, magnifierId) {
         const image = document.getElementById(imageId);
         this.image = image;
         const canvas = document.getElementById(canvasId);
@@ -20,12 +24,17 @@ const roiHandlerProto = {
         if (canvas) {
             this.ctx = canvas.getContext('2d');
         }
+        const magnifier_canvas = document.getElementById(magnifierId);
+        this.magnifier_canvas = magnifier_canvas;
+        if (magnifier_canvas) {
+            this.magnifier_ctx = magnifier_canvas.getContext('2d');
+        }
         this.offset = { x: 0, y: 0 };
         this.mouse = null;
         this.drawed_rois = new Map();
         this.highlight = null;
-        console.info("init", image, canvas);
-        return !!(image && canvas && this.ctx);
+        console.info("init", image, canvas, magnifier_canvas);
+        return !!(image && canvas && this.ctx && magnifier_canvas);
     },
 
     setScale(scale) {
@@ -91,7 +100,7 @@ const roiHandlerProto = {
         const { ctx } = this;
         ctx.resetTransform();
         ctx.clearRect(0, 0, 1920, 1080);
-        
+
         ctx.scale(this.scale, this.scale);
 
         if (this.image) {
@@ -202,6 +211,32 @@ const roiHandlerProto = {
             ctx.lineTo(m.x, m.y + 20);
             ctx.stroke();
         }
+
+        this.draw_magnifier();
+    },
+
+    draw_magnifier() {
+        const ctx = this.magnifier_ctx;
+        ctx.resetTransform();
+        ctx.clearRect(0, 0, 200, 200);
+
+
+        if (this.mouse && this.image) {
+            const m = this.mouse;
+            // ctx.translate(-m.x + this.offset.x + 100, -m.y + this.offset.y + 100);
+            const center_x = m.x - this.offset.x;
+            const center_y = m.y - this.offset.y;
+            const range = 20;
+            ctx.drawImage(this.image, center_x - range, center_y - range, range * 2, range * 2, 0, 0, 200, 200);
+        }
+
+        ctx.resetTransform();
+        ctx.beginPath();
+        ctx.moveTo(100, 0);
+        ctx.lineTo(100, 200);
+        ctx.moveTo(0, 100);
+        ctx.lineTo(200, 100);
+        ctx.stroke();
     },
 
     helloworld() {
