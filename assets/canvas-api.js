@@ -1,10 +1,12 @@
 // assets/roi.js
 const roiHandlerProto = {
     image: null,
+    /** @type {HTMLCanvasElement} */
     canvas: null,
     /** @type {CanvasRenderingContext2D} */
     ctx: null,
 
+    /** @type {HTMLCanvasElement} */
     magnifier_canvas: null,
     /** @type {CanvasRenderingContext2D} */
     magnifier_ctx: null,
@@ -97,9 +99,9 @@ const roiHandlerProto = {
     },
 
     redraw() {
-        const { ctx } = this;
+        const { ctx, canvas } = this;
         ctx.resetTransform();
-        ctx.clearRect(0, 0, 1920, 1080);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         ctx.scale(this.scale, this.scale);
 
@@ -217,8 +219,9 @@ const roiHandlerProto = {
 
     draw_magnifier() {
         const ctx = this.magnifier_ctx;
+        const canvas = this.magnifier_canvas;
         ctx.resetTransform();
-        ctx.clearRect(0, 0, 200, 200);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 
         if (this.mouse && this.image) {
@@ -227,15 +230,15 @@ const roiHandlerProto = {
             const center_x = m.x - this.offset.x;
             const center_y = m.y - this.offset.y;
             const range = 20;
-            ctx.drawImage(this.image, center_x - range, center_y - range, range * 2, range * 2, 0, 0, 200, 200);
+            ctx.drawImage(this.image, center_x - range, center_y - range, range * 2, range * 2, 0, 0, canvas.width, canvas.height);
         }
 
         ctx.resetTransform();
         ctx.beginPath();
-        ctx.moveTo(100, 0);
-        ctx.lineTo(100, 200);
-        ctx.moveTo(0, 100);
-        ctx.lineTo(200, 100);
+        ctx.moveTo(canvas.width / 2, 0);
+        ctx.lineTo(canvas.width / 2, canvas.height);
+        ctx.moveTo(0, canvas.height / 2);
+        ctx.lineTo(canvas.width, canvas.height / 2);
         ctx.stroke();
     },
 

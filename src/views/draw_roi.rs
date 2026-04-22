@@ -378,7 +378,7 @@ struct DrawContext {
 impl DrawContext {
     fn new() -> Self {
         Self {
-            canvas_height: 1080.,
+            canvas_height: 1920.,
             canvas_width: 1920.,
             display_height: 1080.,
             display_width: 1920.,
@@ -518,8 +518,7 @@ impl DrawContext {
 
         self.scale = new_scale;
 
-        let new_canvas_xy =
-            self.to_canvas_pos(pinch_base.mouse_center.0, pinch_base.mouse_center.1);
+        let new_canvas_xy = self.to_canvas_pos((p1.0 + p2.0) / 2.0, (p1.1 + p2.1) / 2.0);
         let image_xy = pinch_base.image_center;
         let new_offset_xy = (new_canvas_xy.0 - image_xy.0, new_canvas_xy.1 - image_xy.1);
         self.mouse_canvas_xy = Some(new_canvas_xy);
@@ -838,7 +837,8 @@ impl DrawRoiContext {
                 }
                 1 => {
                     if tool_ctx.mode == ToolMode::Draw {
-                        tool_ctx.gesture = GestureMode::Draw;
+                        // 一律回到Drag才不會誤畫
+                        tool_ctx.gesture = GestureMode::Drag;
                     } else {
                         tool_ctx.gesture = GestureMode::Drag;
                     }
@@ -982,6 +982,8 @@ pub fn DrawRoiPage() -> Element {
     //         sleep(Duration::from_secs(2)).await;
     //     }
     // });
+    let mut canvas_width = use_signal(|| 1920);
+    let mut canvas_height = use_signal(|| 1080);
 
     let on_file_input = move |e: FormEvent| async move {
         let files = e.files().clone();
@@ -1234,41 +1236,56 @@ pub fn DrawRoiPage() -> Element {
 
             div { class: "grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-start",
 
-                AspectRatio { ratio: 16. / 9.,
-                    canvas {
-                        id: "draw_roi_canvas",
-                        class: "w-full h-full border touch-none",
-                        width: 1920,
-                        height: 1080,
-                        // onclick: on_click,
-                        // ondoubleclick: on_double_click,
-                        onwheel: on_wheel,
-                        // onmousedown: on_mouse_down,
-                        // onmousemove: on_mouse_move,
-                        // onmouseleave: on_mouse_leave,
-                        onpointerdown: on_pointer_down,
-                        onpointermove: on_pointer_move,
-                        onpointerup: on_pointer_up,
-                        onpointercancel: on_pointer_cancel,
-                        onpointerleave: on_pointer_leave,
+                canvas {
+                    id: "draw_roi_canvas",
+                    class: "w-full h-full border touch-none aspect-square md:aspect-video",
+                    width: canvas_width(),
+                    height: canvas_height(),
+                    onwheel: on_wheel,
+                    onpointerdown: on_pointer_down,
+                    onpointermove: on_pointer_move,
+                    onpointerup: on_pointer_up,
+                    onpointercancel: on_pointer_cancel,
+                    onpointerleave: on_pointer_leave,
 
-                        onresize: move |e| async move {
-                            tracing::info!("canvas.onresize {:?}", e.data());
-                            draw_roi_ctx.draw_ctx.write().canvas_resize(&e);
-                        },
-                        onmounted: move |e| async move {
-                            loop {
-                                let draw_proxy = draw_roi_ctx.draw_proxy;
-                                let ret = draw_proxy().init().await;
-                                if ret {
-                                    break;
-                                }
-                                sleep(Duration::from_secs(2)).await;
+                    onresize: move |e| async move {
+                        tracing::info!("canvas.onresize {:?}", e.data());
+                        let s = e.get_content_box_size().unwrap();
+                        let display_width = s.width;
+                        let display_height = s.height;
+
+                        // 計算寬高比
+                        let aspect_ratio = display_width / display_height;
+
+                        // 根據寬高比決定 canvas 內部尺寸
+                        let (new_canvas_width, new_canvas_height) = if aspect_ratio > 1.5 {
+                            // 寬屏（電腦：16:9）
+                            (1920, 1080)
+                        } else {
+                            // 接近正方形或竪屏（手機）
+                            (1920, 1920)
+                        };
+
+                        canvas_width.set(new_canvas_width);
+                        canvas_height.set(new_canvas_height);
+
+                        // 更新 DrawContext
+                        let mut draw_ctx_mut = draw_roi_ctx.draw_ctx;
+                        draw_ctx_mut.write().canvas_resize(&e);
+                        draw_ctx_mut.write().canvas_width = new_canvas_width as f64;
+                        draw_ctx_mut.write().canvas_height = new_canvas_height as f64;
+                    },
+                    onmounted: move |_| async move {
+                        loop {
+                            let draw_proxy = draw_roi_ctx.draw_proxy;
+                            let ret = draw_proxy().init().await;
+                            if ret {
+                                break;
                             }
-                        },
-                    }
+                            sleep(Duration::from_secs(2)).await;
+                        }
+                    },
                 }
-
                 div { class: "grid grid-cols-1 gap-2",
                     Toolbar {
                         ToolbarGroup {
@@ -1349,6 +1366,7 @@ pub fn DrawRoiPage() -> Element {
                 }
             }
         }
+        div { class: "h-96" }
     }
 }
 
