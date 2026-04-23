@@ -1230,62 +1230,69 @@ pub fn DrawRoiPage() -> Element {
 
             Input { r#type: "file", accept: "image/*", oninput: on_file_input }
 
-            div {
-                canvas { id: "magnifier_canvas", width: 200, height: 200 }
-            }
-
             div { class: "grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-start",
 
-                canvas {
-                    id: "draw_roi_canvas",
-                    class: "w-full h-full border touch-none aspect-square md:aspect-video",
-                    width: canvas_width(),
-                    height: canvas_height(),
-                    onwheel: on_wheel,
-                    onpointerdown: on_pointer_down,
-                    onpointermove: on_pointer_move,
-                    onpointerup: on_pointer_up,
-                    onpointercancel: on_pointer_cancel,
-                    onpointerleave: on_pointer_leave,
+                div { class: "relative",
+                    canvas {
+                        id: "draw_roi_canvas",
+                        class: "w-full h-full border touch-none aspect-square md:aspect-video",
+                        width: canvas_width(),
+                        height: canvas_height(),
+                        onwheel: on_wheel,
+                        onpointerdown: on_pointer_down,
+                        onpointermove: on_pointer_move,
+                        onpointerup: on_pointer_up,
+                        onpointercancel: on_pointer_cancel,
+                        onpointerleave: on_pointer_leave,
 
-                    onresize: move |e| async move {
-                        tracing::info!("canvas.onresize {:?}", e.data());
-                        let s = e.get_content_box_size().unwrap();
-                        let display_width = s.width;
-                        let display_height = s.height;
+                        onresize: move |e| async move {
+                            tracing::info!("canvas.onresize {:?}", e.data());
+                            let s = e.get_content_box_size().unwrap();
+                            let display_width = s.width;
+                            let display_height = s.height;
 
-                        // 計算寬高比
-                        let aspect_ratio = display_width / display_height;
+                            // 計算寬高比
+                            let aspect_ratio = display_width / display_height;
 
-                        // 根據寬高比決定 canvas 內部尺寸
-                        let (new_canvas_width, new_canvas_height) = if aspect_ratio > 1.5 {
-                            // 寬屏（電腦：16:9）
-                            (1920, 1080)
-                        } else {
-                            // 接近正方形或竪屏（手機）
-                            (1920, 1920)
-                        };
+                            // 根據寬高比決定 canvas 內部尺寸
+                            let (new_canvas_width, new_canvas_height) = if aspect_ratio > 1.5 {
+                                // 寬屏（電腦：16:9）
+                                (1920, 1080)
+                            } else {
+                                // 接近正方形或竪屏（手機）
+                                (1920, 1920)
+                            };
 
-                        canvas_width.set(new_canvas_width);
-                        canvas_height.set(new_canvas_height);
+                            canvas_width.set(new_canvas_width);
+                            canvas_height.set(new_canvas_height);
 
-                        // 更新 DrawContext
-                        let mut draw_ctx_mut = draw_roi_ctx.draw_ctx;
-                        draw_ctx_mut.write().canvas_resize(&e);
-                        draw_ctx_mut.write().canvas_width = new_canvas_width as f64;
-                        draw_ctx_mut.write().canvas_height = new_canvas_height as f64;
-                    },
-                    onmounted: move |_| async move {
-                        loop {
-                            let draw_proxy = draw_roi_ctx.draw_proxy;
-                            let ret = draw_proxy().init().await;
-                            if ret {
-                                break;
+                            // 更新 DrawContext
+                            let mut draw_ctx_mut = draw_roi_ctx.draw_ctx;
+                            draw_ctx_mut.write().canvas_resize(&e);
+                            draw_ctx_mut.write().canvas_width = new_canvas_width as f64;
+                            draw_ctx_mut.write().canvas_height = new_canvas_height as f64;
+                        },
+                        onmounted: move |_| async move {
+                            loop {
+                                let draw_proxy = draw_roi_ctx.draw_proxy;
+                                let ret = draw_proxy().init().await;
+                                if ret {
+                                    break;
+                                }
+                                sleep(Duration::from_secs(2)).await;
                             }
-                            sleep(Duration::from_secs(2)).await;
-                        }
-                    },
+                        },
+                    }
+
+                    canvas {
+                        id: "magnifier_canvas",
+                        class: "absolute top-0 right-0 border-2 rounded cursor-zoom-in z-10 pointer-events-none",
+
+                        width: 100,
+                        height: 100,
+                    }
                 }
+
                 div { class: "grid grid-cols-1 gap-2",
                     Toolbar {
                         ToolbarGroup {

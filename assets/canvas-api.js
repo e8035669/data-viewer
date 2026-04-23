@@ -214,7 +214,29 @@ const roiHandlerProto = {
             ctx.stroke();
         }
 
+        this.handle_magnifier_pos();
         this.draw_magnifier();
+    },
+
+    handle_magnifier_pos() {
+        const canvas = this.magnifier_canvas;
+        if (this.mouse) {
+            canvas.classList.remove("hidden");
+
+            const mouse_x = this.mouse.x;
+            const canvas_width = this.canvas.width;
+
+            if (mouse_x > canvas_width / 2) {
+                canvas.classList.remove("right-0");
+                canvas.classList.add("left-0");
+            } else {
+                canvas.classList.remove("left-0");
+                canvas.classList.add("right-0");
+            }
+
+        } else {
+            canvas.classList.add("hidden");
+        }
     },
 
     draw_magnifier() {
