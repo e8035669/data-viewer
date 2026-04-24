@@ -41,6 +41,13 @@ enum GestureMode {
     Zoom,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PointerTrajectoryPoint {
+    coord: (f64, f64),
+    pressure: f32,
+    timestamp: OffsetDateTime,
+}
+
 #[derive(Default, Debug, Clone, Store)]
 struct ToolStatus {
     mode: ToolMode,
@@ -50,6 +57,7 @@ struct ToolStatus {
 
     last_pointer_pos: IndexMap<i32, (f64, f64)>,
     primary_buttons: IndexSet<i32>,
+    pointer_trajectories: IndexMap<i32, Vec<PointerTrajectoryPoint>>,
     last_click_time: Option<OffsetDateTime>,
     gesture: GestureMode,
 }
@@ -79,6 +87,48 @@ impl ToolStatus {
     fn remove_pointer_id(&mut self, pointer_id: i32) {
         self.last_pointer_pos.shift_remove(&pointer_id);
         self.primary_buttons.shift_remove(&pointer_id);
+        self.pointer_trajectories.shift_remove(&pointer_id);
+    }
+
+    fn record_pointer_trajectory(
+        &mut self,
+        pointer_id: i32,
+        coord: (f64, f64),
+        pressure: f32,
+        timestamp: OffsetDateTime,
+    ) {
+        let window_start = timestamp - time::Duration::milliseconds(100);
+        let trajectory = self.pointer_trajectories.entry(pointer_id).or_default();
+        trajectory.push(PointerTrajectoryPoint {
+            coord,
+            pressure,
+            timestamp,
+        });
+        trajectory.retain(|point| point.timestamp >= window_start);
+    }
+
+    fn choose_stable_release_coord(
+        &self,
+        pointer_id: i32,
+        current_coord: (f64, f64),
+        current_pressure: f32,
+    ) -> (f64, f64) {
+        let Some(trajectory) = self.pointer_trajectories.get(&pointer_id) else {
+            return current_coord;
+        };
+
+        // 從最新軌跡往回找：只採用 pressure 更大的點；若同壓力，保留較新的點。
+        let mut best_pressure = current_pressure;
+        let mut best_coord = current_coord;
+
+        for point in trajectory.iter().rev() {
+            if point.pressure > best_pressure {
+                best_pressure = point.pressure;
+                best_coord = point.coord;
+            }
+        }
+
+        best_coord
     }
 }
 
@@ -763,6 +813,12 @@ impl DrawRoiContext {
         tool_ctx
             .write()
             .update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
+        tool_ctx.write().record_pointer_trajectory(
+            e.pointer_id(),
+            xy.to_tuple(),
+            e.pressure(),
+            OffsetDateTime::now_utc(),
+        );
 
         let first_id = tool_ctx.read().get_first_id().unwrap();
         if first_id == e.pointer_id() {
@@ -813,9 +869,16 @@ impl DrawRoiContext {
             if tool_ctx.gesture == GestureMode::Draw {
                 let first_id = tool_ctx.get_first_id().unwrap();
                 if first_id == e.pointer_id() {
+                    let stable_release_xy = tool_ctx.choose_stable_release_coord(
+                        e.pointer_id(),
+                        xy.to_tuple(),
+                        e.pressure(),
+                    );
+
                     // 新增一個點
                     let mut draw_ctx = self.draw_ctx;
                     let mut draw_ctx = draw_ctx.write();
+                    draw_ctx.update_mouse_xy(stable_release_xy.0, stable_release_xy.1);
                     draw_ctx.add_point();
 
                     let now = OffsetDateTime::now_utc();
