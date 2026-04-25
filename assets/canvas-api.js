@@ -224,7 +224,7 @@ const roiHandlerProto = {
             canvas.classList.remove("hidden");
 
             const mouse_x = this.mouse.x;
-            const canvas_width = this.canvas.width;
+            const canvas_width = this.canvas.width / this.scale;
 
             if (mouse_x > canvas_width / 2) {
                 canvas.classList.remove("right-0");

@@ -10,6 +10,10 @@
     gap: .25rem;
 }
 
+.toolbar[data-orientation="vertical"] {
+    flex-flow: column wrap;
+}
+
 .toolbar button {
     padding: 8px 12px;
     border: none;
@@ -37,11 +41,21 @@
     gap: 5px;
 }
 
+.toolbar[data-orientation="vertical"] .toolbar-group {
+    flex-direction: column;
+}
+
 .toolbar-separator {
     width: 1px;
     height: 24px;
     margin: 0 5px;
     background-color: var(--primary-color-6);
+}
+
+.toolbar-separator[data-orientation="vertical"] {
+    width: 24px;
+    height: 1px;
+    margin: 5px 0;
 }
 
 .toolbar-content p {

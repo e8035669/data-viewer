@@ -519,17 +519,26 @@ impl DrawContext {
     fn canvas_wheel(&mut self, delta: f64) {
         let zoom_factor = if delta > 0.0 { 0.9 } else { 1.1 };
 
+        let xy = self
+            .mouse_display_xy
+            .clone()
+            .unwrap_or_else(|| (self.display_width / 2.0, self.display_height / 2.0));
+        let can_xy = self
+            .mouse_canvas_xy
+            .clone()
+            .unwrap_or_else(|| self.to_canvas_pos(xy.0, xy.1));
+        let image_xy = (can_xy.0 - self.offset_x, can_xy.1 - self.offset_y);
+
         self.scale = (self.scale * zoom_factor).clamp(0.1, 5.0);
         tracing::info!("New scale: {}", self.scale);
 
-        if let (Some(xy), Some(can_xy)) = (&self.mouse_display_xy, &self.mouse_canvas_xy) {
-            let image_xy = (can_xy.0 - self.offset_x, can_xy.1 - self.offset_y);
-            let new_canvas_xy = self.to_canvas_pos(xy.0, xy.1);
-            let new_offset_xy = (new_canvas_xy.0 - image_xy.0, new_canvas_xy.1 - image_xy.1);
+        let new_canvas_xy = self.to_canvas_pos(xy.0, xy.1);
+        let new_offset_xy = (new_canvas_xy.0 - image_xy.0, new_canvas_xy.1 - image_xy.1);
+        if self.mouse_canvas_xy.is_some() {
             self.mouse_canvas_xy = Some(new_canvas_xy);
-            self.offset_x = new_offset_xy.0;
-            self.offset_y = new_offset_xy.1;
         }
+        self.offset_x = new_offset_xy.0;
+        self.offset_y = new_offset_xy.1;
     }
 
     fn set_pinch_base(&mut self, p1: (f64, f64), p2: (f64, f64)) {
@@ -614,7 +623,7 @@ fn use_draw_roi_context() -> DrawRoiContext {
     };
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DrawRoiContext {
     tool_ctx: Signal<ToolStatus>,
     draw_proxy: Signal<DrawProxy>,
@@ -1356,54 +1365,25 @@ pub fn DrawRoiPage() -> Element {
                     }
                 }
 
-                div { class: "grid grid-cols-1 gap-2",
-                    Toolbar {
-                        ToolbarGroup {
-                            ToggleToolbarButton {
-                                index: 0usize,
-                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::View,
-                                on_click: move || async move {
-                                    draw_roi_ctx.set_tool_mode(ToolMode::View).await;
-                                },
-                                Icon { icon: fa_solid_icons::FaHand }
-                            }
-                            ToggleToolbarButton {
-                                index: 1usize,
-                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Draw,
-                                on_click: move || async move {
-                                    draw_roi_ctx.set_tool_mode(ToolMode::Draw).await;
-                                },
-
-                                Icon { icon: fa_solid_icons::FaSquarePlus }
-                            }
-                            ToggleToolbarButton {
-                                index: 2usize,
-                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Edit,
-                                on_click: move || async move {
-                                    draw_roi_ctx.set_tool_mode(ToolMode::Edit).await;
-                                },
-
-                                Icon { icon: fa_solid_icons::FaPencil }
-                            }
-                            ToggleToolbarButton {
-                                index: 3usize,
-                                is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Delete,
-                                on_click: move || async move {
-                                    draw_roi_ctx.set_tool_mode(ToolMode::Delete).await;
-                                },
-                                Icon { icon: fa_solid_icons::FaSquareMinus }
-                            }
-                        }
+                div { class: "grid grid-cols-1 gap-2 justify-items-center",
+                    div { class: "hidden md:block",
+                        DrawRoiToolbar { draw_roi_ctx, horizontal: false }
                     }
+                    div { class: "md:hidden w-full",
+                        DrawRoiToolbar { draw_roi_ctx, horizontal: true }
+                    }
+                }
+            }
 
-                    ScrollArea {
-                        class: "border border-(--primary-color-6) grid grid-cols-1 gap-2 p-2 max-h-64",
-                        direction: ScrollDirection::Vertical,
-                        if draw_ctx().is_drawed_roi_empty() {
-                            p { class: "text-sm", "ROI列表顯示在此" }
-                        } else {
-                            {rois_list}
-                        }
+            div { class: "border rounded p-3 space-y-2",
+                h3 { class: "text-sm font-semibold", "ROI 列表" }
+                ScrollArea {
+                    class: "border border-(--primary-color-6) grid grid-cols-1 gap-2 p-2 max-h-56",
+                    direction: ScrollDirection::Vertical,
+                    if draw_ctx().is_drawed_roi_empty() {
+                        p { class: "text-sm", "ROI列表顯示在此" }
+                    } else {
+                        {rois_list}
                     }
                 }
             }
@@ -1451,10 +1431,85 @@ fn ToggleToolbarButton(
         ToolbarButton {
             index,
             on_click,
+            style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
             "data-state": if is_on { "on" } else { "off" },
             background: if is_on { "var(--light, var(--primary-color-5)) var(--dark, var(--primary-color-6))" } else { "" },
             color: if is_on { "var(--secondary-color-1)" } else { "" },
             {children}
+        }
+    }
+}
+
+#[component]
+fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
+    let mode_group_cls = if horizontal {
+        "grid grid-cols-4 gap-1"
+    } else {
+        "grid grid-cols-1 gap-1"
+    };
+    let action_group_cls = if horizontal {
+        "grid grid-cols-3 gap-1"
+    } else {
+        "grid grid-cols-1 gap-1"
+    };
+
+    rsx! {
+        Toolbar { horizontal,
+            ToolbarGroup {
+                ToggleToolbarButton {
+                    index: 0usize,
+                    is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::View,
+                    on_click: move || async move {
+                        draw_roi_ctx.set_tool_mode(ToolMode::View).await;
+                    },
+                    Icon { icon: fa_solid_icons::FaHand }
+                }
+                ToggleToolbarButton {
+                    index: 1usize,
+                    is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Draw,
+                    on_click: move || async move {
+                        draw_roi_ctx.set_tool_mode(ToolMode::Draw).await;
+                    },
+                    Icon { icon: fa_solid_icons::FaDrawPolygon }
+                }
+                ToggleToolbarButton {
+                    index: 2usize,
+                    is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Edit,
+                    on_click: move || async move {
+                        draw_roi_ctx.set_tool_mode(ToolMode::Edit).await;
+                    },
+                    Icon { icon: fa_solid_icons::FaPenToSquare }
+                }
+                ToggleToolbarButton {
+                    index: 3usize,
+                    is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::Delete,
+                    on_click: move || async move {
+                        draw_roi_ctx.set_tool_mode(ToolMode::Delete).await;
+                    },
+                    Icon { icon: fa_solid_icons::FaTrashCan }
+                }
+            }
+
+            ToolbarGroup {
+                ToolbarButton {
+                    index: 4usize,
+                    on_click: move || async move {},
+                    style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                    Icon { icon: fa_solid_icons::FaRotateLeft }
+                }
+                ToolbarButton {
+                    index: 5usize,
+                    on_click: move || async move {},
+                    style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                    Icon { icon: fa_solid_icons::FaMagnifyingGlassPlus }
+                }
+                ToolbarButton {
+                    index: 6usize,
+                    on_click: move || async move {},
+                    style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                    Icon { icon: fa_solid_icons::FaMagnifyingGlassMinus }
+                }
+            }
         }
     }
 }
