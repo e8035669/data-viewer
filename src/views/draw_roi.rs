@@ -13,6 +13,7 @@ use dioxus::{
     html::{
         geometry::ElementPoint,
         input_data::{MouseButton, MouseButtonSet},
+        HasFileData,
     },
     logger::tracing,
     prelude::*,
@@ -1061,9 +1062,69 @@ fn rois_to_string(rois: &IndexMap<String, Vec<Point2D<i32, Pixel>>>) -> String {
     ret
 }
 
+fn parse_roi_point(point_text: &str) -> Result<Point2D<i32, Pixel>, String> {
+    let point_text = point_text.trim();
+    let (x_text, y_text) = point_text
+        .split_once(',')
+        .ok_or_else(|| format!("invalid point format: {point_text}"))?;
+    let x = x_text
+        .trim()
+        .parse::<i32>()
+        .map_err(|_| format!("invalid x coordinate: {x_text}"))?;
+    let y = y_text
+        .trim()
+        .parse::<i32>()
+        .map_err(|_| format!("invalid y coordinate: {y_text}"))?;
+    Ok(point2(x, y))
+}
+
+fn rois_from_string(raw: &str) -> Result<Vec<Vec<Point2D<i32, Pixel>>>, String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // rois_to_string 產生的是單引號字串，先轉成 JSON 再解析。
+    let json_like = raw.replace('"', "\\\"").replace('\'', "\"");
+    let parsed: Vec<Vec<String>> =
+        serde_json::from_str(&json_like).map_err(|e| format!("failed to parse roi string: {e}"))?;
+
+    parsed
+        .into_iter()
+        .map(|roi| {
+            roi.into_iter()
+                .map(|point_text| parse_roi_point(&point_text))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()
+}
+
+fn normalize_base64_image_input(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("base64 image text is empty".to_string());
+    }
+
+    if trimmed.starts_with("data:image/") {
+        if trimmed.contains(";base64,") {
+            return Ok(trimmed.to_string());
+        }
+        return Err("only data:image/*;base64,... is supported".to_string());
+    }
+
+    let compact = trimmed.split_whitespace().collect::<String>();
+    BASE64_STANDARD
+        .decode(&compact)
+        .map_err(|e| format!("invalid base64 image content: {e}"))?;
+    Ok(format!("data:image/jpeg;base64,{compact}"))
+}
+
 #[component]
 pub fn DrawRoiPage() -> Element {
     let mut selected_file = use_signal(|| String::new());
+    let mut roi_import_text = use_signal(|| String::new());
+    let mut image_base64_input = use_signal(|| String::new());
+    let toast_api = use_toast();
 
     let mut draw_roi_ctx = use_draw_roi_context();
     let mut draw_ctx = draw_roi_ctx.draw_ctx;
@@ -1092,6 +1153,127 @@ pub fn DrawRoiPage() -> Element {
         let img_str =
             String::from("data:image/jpeg;base64,") + BASE64_STANDARD.encode(image_data).as_str();
         selected_file.set(img_str);
+
+        toast_api.success(
+            "圖片匯入成功".to_string(),
+            ToastOptions::new().duration(Duration::from_secs(3)),
+        );
+    };
+
+    let on_file_drag_over = move |e: DragEvent| {
+        e.prevent_default();
+    };
+
+    let on_file_drop = move |e: DragEvent| async move {
+        e.prevent_default();
+        let files = e.files().clone();
+        tracing::info!("Drop files {:?}", files);
+        let Some(file) = files.get(0) else {
+            toast_api.error(
+                "拖放失敗：沒有圖片檔".to_string(),
+                ToastOptions::new().duration(Duration::from_secs(4)),
+            );
+            return;
+        };
+        let Ok(image_data) = file.read_bytes().await else {
+            toast_api.error(
+                "拖放失敗：無法讀取檔案".to_string(),
+                ToastOptions::new().duration(Duration::from_secs(4)),
+            );
+            return;
+        };
+
+        let img_str =
+            String::from("data:image/jpeg;base64,") + BASE64_STANDARD.encode(image_data).as_str();
+        selected_file.set(img_str);
+        toast_api.success(
+            "拖放圖片匯入成功".to_string(),
+            ToastOptions::new().duration(Duration::from_secs(3)),
+        );
+    };
+
+    let on_roi_import_input = move |e: FormEvent| {
+        roi_import_text.set(e.value());
+    };
+
+    let on_import_rois = move |_| async move {
+        let raw = roi_import_text();
+        let imported_rois = match rois_from_string(&raw) {
+            Ok(rois) => rois,
+            Err(err) => {
+                tracing::error!("ROI 匯入失敗: {}", err);
+                toast_api.error(
+                    format!("ROI 匯入失敗：{err}"),
+                    ToastOptions::new().duration(Duration::from_secs(5)),
+                );
+                return;
+            }
+        };
+
+        if imported_rois.is_empty() {
+            tracing::info!("ROI 匯入略過：內容為空");
+            toast_api.warning(
+                "ROI 匯入略過：內容為空".to_string(),
+                ToastOptions::new().duration(Duration::from_secs(4)),
+            );
+            return;
+        }
+
+        let mut imported_count = 0usize;
+        let mut skipped_count = 0usize;
+        {
+            let mut draw_ctx = draw_roi_ctx.draw_ctx;
+            let mut draw_ctx = draw_ctx.write();
+            for roi in imported_rois {
+                if roi.len() >= 3 {
+                    draw_ctx.insert_new_roi(roi);
+                    imported_count += 1;
+                } else {
+                    tracing::warn!("略過無效 ROI：點數少於 3");
+                    skipped_count += 1;
+                }
+            }
+        }
+
+        roi_import_text.set(String::new());
+        draw_roi_ctx.sync_all_roi(true).await;
+
+        if imported_count > 0 {
+            let mut msg = format!("ROI 匯入成功：{imported_count} 筆");
+            if skipped_count > 0 {
+                msg.push_str(format!("（略過 {skipped_count} 筆）").as_str());
+            }
+            toast_api.success(msg, ToastOptions::new().duration(Duration::from_secs(4)));
+        } else {
+            toast_api.error(
+                "ROI 匯入失敗：沒有有效 ROI（每個 ROI 至少 3 點）".to_string(),
+                ToastOptions::new().duration(Duration::from_secs(5)),
+            );
+        }
+    };
+
+    let on_image_base64_input = move |e: FormEvent| {
+        image_base64_input.set(e.value());
+    };
+
+    let on_import_base64_image = move |_| async move {
+        let raw = image_base64_input();
+        match normalize_base64_image_input(&raw) {
+            Ok(image_src) => {
+                selected_file.set(image_src);
+                image_base64_input.set(String::new());
+                toast_api.success(
+                    "Base64 圖片匯入成功".to_string(),
+                    ToastOptions::new().duration(Duration::from_secs(4)),
+                );
+            }
+            Err(err) => {
+                toast_api.error(
+                    format!("Base64 圖片匯入失敗：{err}"),
+                    ToastOptions::new().duration(Duration::from_secs(5)),
+                );
+            }
+        }
     };
 
     let on_image_load = move |_| async move {
@@ -1294,7 +1476,46 @@ pub fn DrawRoiPage() -> Element {
 
         div { class: "grid grid-cols-1 gap-2",
 
-            Input { r#type: "file", accept: "image/*", oninput: on_file_input }
+            div {
+                class: "w-full",
+                ondragover: on_file_drag_over,
+                ondrop: on_file_drop,
+                Input {
+                    class: "input w-full",
+                    r#type: "file",
+                    placeholder: "選取圖片或拖放到這",
+                    accept: "image/*",
+                    oninput: on_file_input,
+                }
+            }
+
+            div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
+                Input {
+                    class: "input font-mono",
+                    placeholder: "貼上 Base64 圖片字串（可含 data:image/...;base64, 前綴）",
+                    value: image_base64_input(),
+                    oninput: on_image_base64_input,
+                }
+                Button {
+                    variant: ButtonVariant::Secondary,
+                    onclick: on_import_base64_image,
+                    Icon { icon: fa_solid_icons::FaFileImage }
+                }
+            }
+
+            div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
+                Input {
+                    class: "input font-mono",
+                    placeholder: "貼上 ROI 清單字串",
+                    value: roi_import_text(),
+                    oninput: on_roi_import_input,
+                }
+                Button {
+                    variant: ButtonVariant::Secondary,
+                    onclick: on_import_rois,
+                    Icon { icon: fa_solid_icons::FaFileImport }
+                }
+            }
 
             div { class: "grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-start",
 
@@ -1398,8 +1619,6 @@ pub fn DrawRoiPage() -> Element {
                             let prog = "navigator.clipboard.writeText(document.getElementById('all_rois').textContent);"
                                 .to_string();
                             let _ = document::eval(&prog).await;
-
-                            let toast_api = use_toast();
                             toast_api
                                 .success(
                                     "Copy Success!".to_string(),
