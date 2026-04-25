@@ -18,7 +18,10 @@ use dioxus::{
     prelude::*,
 };
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
-use dioxus_primitives::scroll_area::ScrollDirection;
+use dioxus_primitives::{
+    scroll_area::ScrollDirection,
+    toast::{use_toast, ToastOptions},
+};
 use euclid::{point2, size2, Point2D, UnknownUnit};
 use indexmap::{IndexMap, IndexSet};
 use time::{OffsetDateTime, PrimitiveDateTime, Time};
@@ -768,6 +771,26 @@ impl DrawRoiContext {
         builder.execute(&draw_proxy).await;
     }
 
+    async fn canvas_wheel(&self, delta: f64) {
+        let mut draw_ctx = self.draw_ctx;
+        draw_ctx.write().canvas_wheel(delta);
+        self.sync_pos_offset(true).await;
+    }
+
+    async fn undo_last_point(&self) {
+        let mut draw_ctx = self.draw_ctx;
+        draw_ctx.write().pop_last_point(1);
+        self.sync_all_roi(true).await;
+    }
+
+    async fn zoom_in(&self) {
+        self.canvas_wheel(-1.0).await;
+    }
+
+    async fn zoom_out(&self) {
+        self.canvas_wheel(1.0).await;
+    }
+
     async fn canvas_pointer_down(&self, e: &PointerEvent) {
         let DrawRoiContext {
             mut tool_ctx,
@@ -1082,29 +1105,7 @@ pub fn DrawRoiPage() -> Element {
         e.prevent_default();
         tracing::info!("on_wheel {:?}", e.data());
         let delta = e.delta().strip_units().y;
-        let DrawRoiContext {
-            tool_ctx,
-            draw_proxy,
-            mut draw_ctx,
-        } = draw_roi_ctx;
-        draw_ctx.write().canvas_wheel(delta);
-
-        let draw_ctx = draw_ctx();
-        let scale = draw_ctx.scale;
-        let (x, y) = (draw_ctx.offset_x, draw_ctx.offset_y);
-        let mut builder = DrawCommandBuilder::new();
-        builder.set_offset(x, y);
-        builder.set_scale(scale);
-        match draw_ctx.mouse_canvas_xy {
-            Some((x, y)) => {
-                builder.set_mouse(x, y);
-            }
-            None => {
-                builder.clear_mouse();
-            }
-        }
-        builder.redraw();
-        builder.execute(&draw_proxy()).await;
+        draw_roi_ctx.canvas_wheel(delta).await;
     };
 
     let on_mouse_move = move |e: MouseEvent| async move {
@@ -1224,27 +1225,21 @@ pub fn DrawRoiPage() -> Element {
     };
 
     let drawed_rois = draw_ctx.read().get_drawed_rois();
-    let rois_content = drawed_rois.iter().map(|(name, roi)| {
-        let roi_text = roi_to_string(roi);
-        rsx! {
-            div { key: "{name}", class: "flex items-center gap-2",
-                div { "{name}" }
-                div { class: "font-mono text-sm", {roi_text} }
-            }
-        }
-    });
-    let drawed_rois = draw_ctx.read().get_drawed_rois();
     let all_rois = rois_to_string(&drawed_rois);
 
-    let roi_keys = draw_ctx.read().get_drawed_rois_key();
-    let rois_list = roi_keys.iter().map(|k| {
+    let drawed_rois = draw_ctx.read().get_drawed_rois();
+    let rois_list = drawed_rois.iter().map(|(k, roi)| {
         let k = k.clone();
         let k1 = k.clone();
         let k2 = k.clone();
+        let roi_text = roi_to_string(roi);
         rsx!{
-            div { class: "flex", key: "ROI_{k}",
-                div { class: "flex-1", "{k}" }
-                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::View { "" } else { "hidden" },
+            div { class: "flex items-center gap-2", key: "ROI_{k}",
+                div { class: "shrink-0 font-semibold text-sm", "{k}" }
+                div { class: "flex-1 min-w-0 overflow-x-auto",
+                    span { class: "font-mono text-xs whitespace-nowrap", "{roi_text}" }
+                }
+                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::View { "shrink-0" } else { "shrink-0 hidden" },
                     Button {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
@@ -1256,8 +1251,7 @@ pub fn DrawRoiPage() -> Element {
                         Icon { icon: fa_solid_icons::FaLightbulb }
                     }
                 }
-
-                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::Edit { "" } else { "hidden" },
+                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::Edit { "shrink-0" } else { "shrink-0 hidden" },
                     Button {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
@@ -1269,7 +1263,7 @@ pub fn DrawRoiPage() -> Element {
                         Icon { icon: fa_solid_icons::FaPencil }
                     }
                 }
-                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::Delete { "" } else { "hidden" },
+                div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::Delete { "shrink-0" } else { "shrink-0 hidden" },
                     Button {
                         variant: ButtonVariant::Secondary,
                         onclick: move |_| {
@@ -1282,8 +1276,8 @@ pub fn DrawRoiPage() -> Element {
                     }
                 }
             }
-
-        }});
+        }
+    });
 
     let canvas_api = asset!("/assets/canvas-api.js");
 
@@ -1388,30 +1382,31 @@ pub fn DrawRoiPage() -> Element {
                 }
             }
 
-            // 已繪製 ROI 的內容顯示區域
-            div { class: "border rounded p-3 max-h-40 overflow-y-auto",
-                if draw_ctx().is_drawed_roi_empty() {
-                    p { class: "text-sm", "尚未繪製任何 ROI" }
-                } else {
-                    {rois_content}
-                }
-            }
-
             // 所有 ROI 串成一行的顯示區域，附帶複製按鈕
-            if !draw_ctx().is_drawed_roi_empty() {
-                div { class: "border rounded p-3 space-y-2 mt-2",
-                    h3 { class: "text-sm font-semibold", "完整 ROI 資料" }
-                    div { class: "flex gap-2 items-start",
-                        div { class: "flex-1 border rounded p-2 overflow-x-auto",
-                            code {
-                                id: "all_rois",
-                                class: "text-xs font-mono break-all whitespace-pre-wrap",
-                                "{all_rois}"
-                            }
+            div { class: "border rounded p-3 space-y-2 mt-2",
+                h3 { class: "text-sm font-semibold", "完整 ROI 資料" }
+                div { class: "flex gap-2 items-start",
+                    div { class: "flex-1 border rounded p-2 overflow-x-auto",
+                        code {
+                            id: "all_rois",
+                            class: "text-xs font-mono break-all whitespace-pre-wrap",
+                            "{all_rois}"
                         }
-                        Button { "onclick": "navigator.clipboard.writeText(document.getElementById('all_rois').textContent);",
-                            Icon { icon: fa_solid_icons::FaClipboard }
-                        }
+                    }
+                    Button {
+                        onclick: move |_| async move {
+                            let prog = "navigator.clipboard.writeText(document.getElementById('all_rois').textContent);"
+                                .to_string();
+                            let _ = document::eval(&prog).await;
+
+                            let toast_api = use_toast();
+                            toast_api
+                                .success(
+                                    "Copy Success!".to_string(),
+                                    ToastOptions::new().duration(Duration::from_secs(5)),
+                                );
+                        },
+                        Icon { icon: fa_solid_icons::FaClipboard }
                     }
                 }
             }
@@ -1442,17 +1437,6 @@ fn ToggleToolbarButton(
 
 #[component]
 fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
-    let mode_group_cls = if horizontal {
-        "grid grid-cols-4 gap-1"
-    } else {
-        "grid grid-cols-1 gap-1"
-    };
-    let action_group_cls = if horizontal {
-        "grid grid-cols-3 gap-1"
-    } else {
-        "grid grid-cols-1 gap-1"
-    };
-
     rsx! {
         Toolbar { horizontal,
             ToolbarGroup {
@@ -1495,19 +1479,25 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
             ToolbarGroup {
                 ToolbarButton {
                     index: 4usize,
-                    on_click: move || async move {},
+                    on_click: move || async move {
+                        draw_roi_ctx.undo_last_point().await;
+                    },
                     style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
                     Icon { icon: fa_solid_icons::FaRotateLeft }
                 }
                 ToolbarButton {
                     index: 5usize,
-                    on_click: move || async move {},
+                    on_click: move || async move {
+                        draw_roi_ctx.zoom_in().await;
+                    },
                     style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
                     Icon { icon: fa_solid_icons::FaMagnifyingGlassPlus }
                 }
                 ToolbarButton {
                     index: 6usize,
-                    on_click: move || async move {},
+                    on_click: move || async move {
+                        draw_roi_ctx.zoom_out().await;
+                    },
                     style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
                     Icon { icon: fa_solid_icons::FaMagnifyingGlassMinus }
                 }
