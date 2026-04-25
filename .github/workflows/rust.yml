@@ -38,13 +38,21 @@ jobs:
           "$APPIMAGE" --appimage-extract
           chmod -R u+w squashfs-root
 
-          # Copy WebKit helper executables (these are not bundled by dx bundle)
+          # Copy WebKit helper executables and injected bundle (these are not bundled by dx bundle)
+          # See: https://github.com/tauri-apps/tauri/blob/dev/crates/tauri-bundler/src/bundle/linux/appimage/linuxdeploy.rs
           WEBKIT_LIBEXEC="/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
           DEST="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
-          mkdir -p "$DEST"
+          mkdir -p "$DEST/injected-bundle"
           for proc in WebKitNetworkProcess WebKitWebProcess WebKitWebDriver; do
             [ -f "$WEBKIT_LIBEXEC/$proc" ] && cp "$WEBKIT_LIBEXEC/$proc" "$DEST/"
           done
+          [ -f "$WEBKIT_LIBEXEC/injected-bundle/libwebkit2gtkinjectedbundle.so" ] && \
+            cp "$WEBKIT_LIBEXEC/injected-bundle/libwebkit2gtkinjectedbundle.so" "$DEST/injected-bundle/"
+
+          # Binary-patch absolute /usr paths in libwebkit*.so to relative paths (././)
+          # This allows WebKit to find its helper processes from $APPDIR instead of the system path
+          # See: https://github.com/tauri-apps/tauri/issues/2805
+          find squashfs-root/usr/lib* -name 'libwebkit*' -exec sed -i -e "s|/usr|././|g" '{}' \;
 
           # Inject WEBKIT_EXEC_PATH into AppRun so WebKit finds the bundled processes
           if ! grep -q 'WEBKIT_EXEC_PATH' squashfs-root/AppRun; then
