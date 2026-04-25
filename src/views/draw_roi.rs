@@ -1052,18 +1052,33 @@ impl DrawRoiContext {
         let xy = e.element_coordinates();
         let mut tool_ctx = self.tool_ctx;
         let mut should_sync_all = false;
+        let mut stable_release_xy: Option<(f64, f64)> = None;
+        let mut moved_edit_roi_on_up: Option<(String, Vec<Point2D<i32, Pixel>>)> = None;
         {
             let mut tool_ctx = tool_ctx.write();
             tool_ctx.update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
 
-            if tool_ctx.gesture == GestureMode::Draw {
-                let first_id = tool_ctx.get_first_id().unwrap();
+            let first_id = tool_ctx.get_first_id();
+            if let Some(first_id) = first_id {
                 if first_id == e.pointer_id() {
-                    let stable_release_xy = tool_ctx.choose_stable_release_coord(
+                    stable_release_xy = Some(tool_ctx.choose_stable_release_coord(
                         e.pointer_id(),
                         xy.to_tuple(),
                         e.pressure(),
-                    );
+                    ));
+                }
+            }
+
+            if tool_ctx.gesture == GestureMode::Draw {
+                let first_id = tool_ctx.get_first_id().unwrap();
+                if first_id == e.pointer_id() {
+                    let stable_release_xy = stable_release_xy.unwrap_or_else(|| {
+                        tool_ctx.choose_stable_release_coord(
+                            e.pointer_id(),
+                            xy.to_tuple(),
+                            e.pressure(),
+                        )
+                    });
 
                     // 新增一個點
                     let mut draw_ctx = self.draw_ctx;
@@ -1107,6 +1122,12 @@ impl DrawRoiContext {
             let mut draw_ctx = self.draw_ctx;
             let mut draw_ctx = draw_ctx.write();
             if let HightlightStatus::Edit(_) = draw_ctx.highlight {
+                if let Some((x, y)) = stable_release_xy {
+                    draw_ctx.update_mouse_xy(x, y);
+                }
+                if draw_ctx.edit_drag_index().is_some() {
+                    moved_edit_roi_on_up = draw_ctx.update_dragging_edit_point();
+                }
                 draw_ctx.clear_edit_drag();
                 draw_ctx.update_edit_near_point(12.0);
             }
@@ -1114,6 +1135,28 @@ impl DrawRoiContext {
 
         if should_sync_all {
             self.sync_all_roi(true).await;
+        } else if let Some((roi_name, points)) = moved_edit_roi_on_up {
+            let draw_proxy = self.draw_proxy;
+            let draw_proxy = draw_proxy();
+            let draw_ctx = self.draw_ctx;
+            let draw_ctx = draw_ctx();
+
+            let mut builder = DrawCommandBuilder::new();
+            match draw_ctx.mouse_canvas_xy {
+                Some((x, y)) => {
+                    builder.set_mouse(x, y);
+                }
+                None => {
+                    builder.clear_mouse();
+                }
+            }
+            builder
+                .set_scale(draw_ctx.scale)
+                .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
+                .add_drawed_roi(roi_name, points)
+                .redraw()
+                .execute(&draw_proxy)
+                .await;
         } else {
             self.sync_pos_offset(true).await;
         }
