@@ -55,7 +55,7 @@ jobs:
           # Repack into a new AppImage
           wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool-x86_64.AppImage
-          ARCH=x86_64 ./appimagetool-x86_64.AppImage squashfs-root "$APPIMAGE_NAME"
+          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool-x86_64.AppImage squashfs-root "$APPIMAGE_NAME"
 
           # Replace original AppImage with the patched one
           mv "$APPIMAGE_NAME" target/dx/data-viewer/bundle/linux/appimage/
