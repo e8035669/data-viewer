@@ -5,7 +5,7 @@ use crate::components::{
     button::{Button, ButtonVariant},
     input::Input,
     scroll_area::ScrollArea,
-    toolbar::{Toolbar, ToolbarButton, ToolbarGroup},
+    toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator},
 };
 use async_std::task::sleep;
 use base64::prelude::*;
@@ -1489,6 +1489,8 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                     Icon { icon: fa_solid_icons::FaTrashCan }
                 }
             }
+
+            ToolbarSeparator { horizontal }
 
             ToolbarGroup {
                 ToolbarButton {
