@@ -39,7 +39,9 @@ enum ToolMode {
 enum GestureMode {
     #[default]
     None,
-    Drag,
+    Pan,
+    EditHover,
+    DragPoint(usize),
     Draw,
     Zoom,
 }
@@ -139,7 +141,6 @@ impl ToolStatus {
 struct EditStatus {
     target: String,
     near: Option<usize>,
-    drag: Option<usize>,
 }
 
 impl EditStatus {
@@ -615,22 +616,9 @@ impl DrawContext {
         }
     }
 
-    fn edit_drag_index(&self) -> Option<usize> {
-        match &self.highlight {
-            HightlightStatus::Edit(edit) => edit.drag,
-            _ => None,
-        }
-    }
-
     fn set_edit_near(&mut self, near: Option<usize>) {
         if let HightlightStatus::Edit(edit) = &mut self.highlight {
             edit.near = near;
-        }
-    }
-
-    fn set_edit_drag(&mut self, drag: Option<usize>) {
-        if let HightlightStatus::Edit(edit) = &mut self.highlight {
-            edit.drag = drag;
         }
     }
 
@@ -682,19 +670,15 @@ impl DrawContext {
     }
 
     fn begin_edit_drag(&mut self, display_radius_px: f64) -> Option<usize> {
-        let near = self.update_edit_near_point(display_radius_px);
-        self.set_edit_drag(near);
-        near
+        self.update_edit_near_point(display_radius_px)
     }
 
-    fn clear_edit_drag(&mut self) {
-        self.set_edit_drag(None);
-    }
-
-    fn update_dragging_edit_point(&mut self) -> Option<(String, Vec<Point2D<i32, Pixel>>)> {
+    fn update_dragging_edit_point(
+        &mut self,
+        drag_idx: usize,
+    ) -> Option<(String, Vec<Point2D<i32, Pixel>>)> {
         let mouse_canvas = self.mouse_canvas_xy?;
         let target = self.edit_target()?;
-        let drag_idx = self.edit_drag_index()?;
 
         let roi = self.drawed_rois.get_mut(&target)?;
         if drag_idx >= roi.len() {
@@ -902,25 +886,31 @@ impl DrawRoiContext {
             ..
         } = *self;
         let xy = e.element_coordinates();
-        let mut should_start_edit_drag = false;
 
-        {
-            let mut tool_ctx = tool_ctx.write();
-            tool_ctx.update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
+        // Step 1: update input tracking
+        tool_ctx
+            .write()
+            .update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
+
+        // Step 2: update mouse position (needed for hit test)
+        draw_ctx.write().update_mouse_xy(xy.x, xy.y);
+
+        // Step 3: classify gesture from mode + pointer count + hit test
+        let gesture = {
+            let tool_ctx = tool_ctx.read();
             let clicked_ids = tool_ctx.primary_buttons.clone();
+            let mode = tool_ctx.mode;
             match clicked_ids.len() {
-                0 => {
-                    tool_ctx.gesture = GestureMode::None;
-                }
-                1 => {
-                    if tool_ctx.mode == ToolMode::Draw {
-                        tool_ctx.gesture = GestureMode::Draw;
-                    } else {
-                        tool_ctx.gesture = GestureMode::Drag;
-                    }
-                }
+                0 => GestureMode::None,
+                1 => match mode {
+                    ToolMode::Draw => GestureMode::Draw,
+                    ToolMode::Edit => match draw_ctx.write().begin_edit_drag(12.0) {
+                        Some(idx) => GestureMode::DragPoint(idx),
+                        None => GestureMode::EditHover,
+                    },
+                    _ => GestureMode::Pan,
+                },
                 2 => {
-                    tool_ctx.gesture = GestureMode::Zoom;
                     let p1 = tool_ctx
                         .last_pointer_pos
                         .get(&clicked_ids[0])
@@ -932,36 +922,21 @@ impl DrawRoiContext {
                         .cloned()
                         .unwrap();
                     draw_ctx.write().set_pinch_base(p1, p2);
+                    GestureMode::Zoom
                 }
-                _ => {}
+                _ => GestureMode::Zoom,
             }
-
-            if tool_ctx.mode == ToolMode::Edit
-                && tool_ctx.gesture == GestureMode::Drag
-                && clicked_ids.len() == 1
-            {
-                should_start_edit_drag = true;
-            }
-        }
-
-        {
-            let mut draw_ctx = draw_ctx.write();
-            draw_ctx.update_mouse_xy(xy.x, xy.y);
-            if should_start_edit_drag {
-                draw_ctx.begin_edit_drag(12.0);
-            }
-        }
+        };
+        tool_ctx.write().gesture = gesture;
 
         self.sync_pos_offset(true).await;
     }
 
     async fn canvas_pointer_move(&self, e: &PointerEvent) {
         let mut tool_ctx = self.tool_ctx;
-        let tool_ctx_copy = tool_ctx();
-        let current_mode = tool_ctx_copy.mode;
-        let current_gesture = tool_ctx_copy.gesture;
         let xy = e.element_coordinates();
         let movement = tool_ctx.read().get_movement(e.pointer_id(), xy.to_tuple());
+        let current_gesture = tool_ctx.read().gesture;
         tool_ctx
             .write()
             .update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
@@ -974,49 +949,44 @@ impl DrawRoiContext {
 
         let first_id = tool_ctx.read().get_first_id().unwrap();
         let mut moved_edit_roi: Option<(String, Vec<Point2D<i32, Pixel>>)> = None;
-        let mut is_dragging_edit_point = false;
         if first_id == e.pointer_id() {
             self.update_mouse_xy(&xy);
 
-            if current_mode == ToolMode::Edit && current_gesture == GestureMode::Drag {
-                let mut draw_ctx = self.draw_ctx;
-                let mut draw_ctx = draw_ctx.write();
-                is_dragging_edit_point = draw_ctx.edit_drag_index().is_some();
-                if is_dragging_edit_point {
-                    moved_edit_roi = draw_ctx.update_dragging_edit_point();
-                } else {
-                    draw_ctx.update_edit_near_point(12.0);
-                }
-            }
-        }
-
-        match current_gesture {
-            GestureMode::Drag => {
-                if first_id == e.pointer_id() && !is_dragging_edit_point {
+            match current_gesture {
+                GestureMode::Pan => {
                     let draw_ctx = self.draw_ctx;
                     let move_canvas_xy = draw_ctx.read().to_canvas_pos(movement.0, movement.1);
                     self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
                 }
-            }
-            GestureMode::Zoom => {
-                let tool_ctx_copy = tool_ctx();
-                let clicked_ids = tool_ctx_copy.primary_buttons.clone();
-                if clicked_ids.len() >= 2 {
-                    let p1 = tool_ctx_copy
-                        .last_pointer_pos
-                        .get(&clicked_ids[0])
-                        .cloned()
-                        .unwrap();
-                    let p2 = tool_ctx_copy
-                        .last_pointer_pos
-                        .get(&clicked_ids[1])
-                        .cloned()
-                        .unwrap();
+                GestureMode::EditHover => {
                     let mut draw_ctx = self.draw_ctx;
-                    draw_ctx.write().perform_pinch_zoom(p1, p2);
+                    draw_ctx.write().update_edit_near_point(12.0);
                 }
+                GestureMode::DragPoint(idx) => {
+                    let mut draw_ctx = self.draw_ctx;
+                    moved_edit_roi = draw_ctx.write().update_dragging_edit_point(idx);
+                }
+                _ => {}
             }
-            _ => {}
+        }
+
+        if let GestureMode::Zoom = current_gesture {
+            let tool_ctx_copy = tool_ctx();
+            let clicked_ids = tool_ctx_copy.primary_buttons.clone();
+            if clicked_ids.len() >= 2 {
+                let p1 = tool_ctx_copy
+                    .last_pointer_pos
+                    .get(&clicked_ids[0])
+                    .cloned()
+                    .unwrap();
+                let p2 = tool_ctx_copy
+                    .last_pointer_pos
+                    .get(&clicked_ids[1])
+                    .cloned()
+                    .unwrap();
+                let mut draw_ctx = self.draw_ctx;
+                draw_ctx.write().perform_pinch_zoom(p1, p2);
+            }
         }
 
         tool_ctx.write().last_mouse_pos = Some((xy.x, xy.y));
@@ -1100,17 +1070,35 @@ impl DrawRoiContext {
                 }
             }
 
+            if let GestureMode::DragPoint(drag_idx) = tool_ctx.gesture {
+                let first_id = tool_ctx.get_first_id().unwrap();
+                if first_id == e.pointer_id() {
+                    let stable_xy = stable_release_xy.unwrap_or_else(|| {
+                        tool_ctx.choose_stable_release_coord(
+                            e.pointer_id(),
+                            xy.to_tuple(),
+                            e.pressure(),
+                        )
+                    });
+
+                    let mut draw_ctx = self.draw_ctx;
+                    let mut draw_ctx = draw_ctx.write();
+                    draw_ctx.update_mouse_xy(stable_xy.0, stable_xy.1);
+                    moved_edit_roi_on_up = draw_ctx.update_dragging_edit_point(drag_idx);
+                    draw_ctx.update_edit_near_point(12.0);
+                }
+            }
+
             match tool_ctx.primary_buttons.len() {
                 0 => {
                     tool_ctx.gesture = GestureMode::None;
                 }
                 1 => {
-                    if tool_ctx.mode == ToolMode::Draw {
-                        // 一律回到Drag才不會誤畫
-                        tool_ctx.gesture = GestureMode::Drag;
+                    tool_ctx.gesture = if tool_ctx.mode == ToolMode::Edit {
+                        GestureMode::EditHover
                     } else {
-                        tool_ctx.gesture = GestureMode::Drag;
-                    }
+                        GestureMode::Pan
+                    };
                 }
                 _ => {
                     tool_ctx.gesture = GestureMode::Zoom;
@@ -1125,10 +1113,6 @@ impl DrawRoiContext {
                 if let Some((x, y)) = stable_release_xy {
                     draw_ctx.update_mouse_xy(x, y);
                 }
-                if draw_ctx.edit_drag_index().is_some() {
-                    moved_edit_roi_on_up = draw_ctx.update_dragging_edit_point();
-                }
-                draw_ctx.clear_edit_drag();
                 draw_ctx.update_edit_near_point(12.0);
             }
         }
@@ -1170,8 +1154,8 @@ impl DrawRoiContext {
             let mut draw_ctx = draw_ctx.write();
             tool_ctx.remove_pointer_id(e.pointer_id());
             draw_ctx.mouse_leave();
-            draw_ctx.clear_edit_drag();
             draw_ctx.set_edit_near(None);
+            tool_ctx.gesture = GestureMode::None;
             tool_ctx.last_mouse_pos = None;
         }
 
@@ -1186,8 +1170,8 @@ impl DrawRoiContext {
             let mut draw_ctx = draw_ctx.write();
             tool_ctx.remove_pointer_id(e.pointer_id());
             draw_ctx.mouse_leave();
-            draw_ctx.clear_edit_drag();
             draw_ctx.set_edit_near(None);
+            tool_ctx.gesture = GestureMode::None;
             tool_ctx.last_mouse_pos = None;
         }
 
