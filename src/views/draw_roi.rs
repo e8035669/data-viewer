@@ -608,6 +608,106 @@ impl DrawContext {
         }
     }
 
+    fn edit_target(&self) -> Option<String> {
+        match &self.highlight {
+            HightlightStatus::Edit(edit) => Some(edit.target.clone()),
+            _ => None,
+        }
+    }
+
+    fn edit_drag_index(&self) -> Option<usize> {
+        match &self.highlight {
+            HightlightStatus::Edit(edit) => edit.drag,
+            _ => None,
+        }
+    }
+
+    fn set_edit_near(&mut self, near: Option<usize>) {
+        if let HightlightStatus::Edit(edit) = &mut self.highlight {
+            edit.near = near;
+        }
+    }
+
+    fn set_edit_drag(&mut self, drag: Option<usize>) {
+        if let HightlightStatus::Edit(edit) = &mut self.highlight {
+            edit.drag = drag;
+        }
+    }
+
+    fn display_px_to_canvas_x(&self, display_px: f64) -> f64 {
+        (display_px * self.canvas_width / self.display_width / self.scale).abs()
+    }
+
+    fn display_px_to_canvas_y(&self, display_px: f64) -> f64 {
+        (display_px * self.canvas_height / self.display_height / self.scale).abs()
+    }
+
+    fn find_near_point_index(&self, target: &str, display_radius_px: f64) -> Option<usize> {
+        let mouse_canvas = self.mouse_canvas_xy?;
+        let roi = self.drawed_rois.get(target)?;
+
+        let radius_x = self.display_px_to_canvas_x(display_radius_px).max(f64::EPSILON);
+        let radius_y = self.display_px_to_canvas_y(display_radius_px).max(f64::EPSILON);
+
+        let mut best: Option<(usize, f64)> = None;
+        for (idx, point) in roi.iter().enumerate() {
+            let px = point.x as f64 + self.offset_x;
+            let py = point.y as f64 + self.offset_y;
+
+            let dx = (mouse_canvas.0 - px) / radius_x;
+            let dy = (mouse_canvas.1 - py) / radius_y;
+            let normalized_distance_sq = dx * dx + dy * dy;
+
+            if normalized_distance_sq <= 1.0 {
+                if let Some((_, best_distance_sq)) = best {
+                    if normalized_distance_sq < best_distance_sq {
+                        best = Some((idx, normalized_distance_sq));
+                    }
+                } else {
+                    best = Some((idx, normalized_distance_sq));
+                }
+            }
+        }
+
+        best.map(|(idx, _)| idx)
+    }
+
+    fn update_edit_near_point(&mut self, display_radius_px: f64) -> Option<usize> {
+        let Some(target) = self.edit_target() else {
+            return None;
+        };
+        let near = self.find_near_point_index(&target, display_radius_px);
+        self.set_edit_near(near);
+        near
+    }
+
+    fn begin_edit_drag(&mut self, display_radius_px: f64) -> Option<usize> {
+        let near = self.update_edit_near_point(display_radius_px);
+        self.set_edit_drag(near);
+        near
+    }
+
+    fn clear_edit_drag(&mut self) {
+        self.set_edit_drag(None);
+    }
+
+    fn update_dragging_edit_point(&mut self) -> Option<(String, Vec<Point2D<i32, Pixel>>)> {
+        let mouse_canvas = self.mouse_canvas_xy?;
+        let target = self.edit_target()?;
+        let drag_idx = self.edit_drag_index()?;
+
+        let roi = self.drawed_rois.get_mut(&target)?;
+        if drag_idx >= roi.len() {
+            return None;
+        }
+
+        let x = (mouse_canvas.0 - self.offset_x).round() as i32;
+        let y = (mouse_canvas.1 - self.offset_y).round() as i32;
+        roi[drag_idx] = point2(x, y);
+
+        Some((target, roi.clone()))
+    }
+
     fn insert_new_roi(&mut self, completed_roi: Vec<Point2D<i32, Pixel>>) {
         let mut roi_name = format!("ROI {}", self.next_roi_id); // 用計數器生成名稱
         while self.drawed_rois.contains_key(&roi_name) {
@@ -802,6 +902,7 @@ impl DrawRoiContext {
             ..
         } = *self;
         let xy = e.element_coordinates();
+        let mut should_start_edit_drag = false;
 
         {
             let mut tool_ctx = tool_ctx.write();
@@ -834,6 +935,21 @@ impl DrawRoiContext {
                 }
                 _ => {}
             }
+
+            if tool_ctx.mode == ToolMode::Edit
+                && tool_ctx.gesture == GestureMode::Drag
+                && clicked_ids.len() == 1
+            {
+                should_start_edit_drag = true;
+            }
+        }
+
+        {
+            let mut draw_ctx = draw_ctx.write();
+            draw_ctx.update_mouse_xy(xy.x, xy.y);
+            if should_start_edit_drag {
+                draw_ctx.begin_edit_drag(12.0);
+            }
         }
 
         self.sync_pos_offset(true).await;
@@ -857,13 +973,26 @@ impl DrawRoiContext {
         );
 
         let first_id = tool_ctx.read().get_first_id().unwrap();
+        let mut moved_edit_roi: Option<(String, Vec<Point2D<i32, Pixel>>)> = None;
+        let mut is_dragging_edit_point = false;
         if first_id == e.pointer_id() {
             self.update_mouse_xy(&xy);
+
+            if current_mode == ToolMode::Edit && current_gesture == GestureMode::Drag {
+                let mut draw_ctx = self.draw_ctx;
+                let mut draw_ctx = draw_ctx.write();
+                is_dragging_edit_point = draw_ctx.edit_drag_index().is_some();
+                if is_dragging_edit_point {
+                    moved_edit_roi = draw_ctx.update_dragging_edit_point();
+                } else {
+                    draw_ctx.update_edit_near_point(12.0);
+                }
+            }
         }
 
         match current_gesture {
             GestureMode::Drag => {
-                if first_id == e.pointer_id() {
+                if first_id == e.pointer_id() && !is_dragging_edit_point {
                     let draw_ctx = self.draw_ctx;
                     let move_canvas_xy = draw_ctx.read().to_canvas_pos(movement.0, movement.1);
                     self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
@@ -892,12 +1021,37 @@ impl DrawRoiContext {
 
         tool_ctx.write().last_mouse_pos = Some((xy.x, xy.y));
 
-        self.sync_pos_offset(true).await;
+        if let Some((roi_name, points)) = moved_edit_roi {
+            let draw_proxy = self.draw_proxy;
+            let draw_proxy = draw_proxy();
+            let draw_ctx = self.draw_ctx;
+            let draw_ctx = draw_ctx();
+
+            let mut builder = DrawCommandBuilder::new();
+            match draw_ctx.mouse_canvas_xy {
+                Some((x, y)) => {
+                    builder.set_mouse(x, y);
+                }
+                None => {
+                    builder.clear_mouse();
+                }
+            }
+            builder
+                .set_scale(draw_ctx.scale)
+                .set_offset(draw_ctx.offset_x, draw_ctx.offset_y)
+                .add_drawed_roi(roi_name, points)
+                .redraw()
+                .execute(&draw_proxy)
+                .await;
+        } else {
+            self.sync_pos_offset(true).await;
+        }
     }
 
     async fn canvas_pointer_up(&self, e: &PointerEvent) {
         let xy = e.element_coordinates();
         let mut tool_ctx = self.tool_ctx;
+        let mut should_sync_all = false;
         {
             let mut tool_ctx = tool_ctx.write();
             tool_ctx.update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
@@ -927,6 +1081,7 @@ impl DrawRoiContext {
                     }
 
                     tool_ctx.last_click_time = Some(OffsetDateTime::now_utc());
+                    should_sync_all = true;
                 }
             }
 
@@ -948,7 +1103,20 @@ impl DrawRoiContext {
             }
         }
 
-        self.sync_all_roi(true).await;
+        {
+            let mut draw_ctx = self.draw_ctx;
+            let mut draw_ctx = draw_ctx.write();
+            if let HightlightStatus::Edit(_) = draw_ctx.highlight {
+                draw_ctx.clear_edit_drag();
+                draw_ctx.update_edit_near_point(12.0);
+            }
+        }
+
+        if should_sync_all {
+            self.sync_all_roi(true).await;
+        } else {
+            self.sync_pos_offset(true).await;
+        }
     }
 
     async fn canvas_pointer_cancel(&self, e: &PointerEvent) {
@@ -959,6 +1127,8 @@ impl DrawRoiContext {
             let mut draw_ctx = draw_ctx.write();
             tool_ctx.remove_pointer_id(e.pointer_id());
             draw_ctx.mouse_leave();
+            draw_ctx.clear_edit_drag();
+            draw_ctx.set_edit_near(None);
             tool_ctx.last_mouse_pos = None;
         }
 
@@ -973,6 +1143,8 @@ impl DrawRoiContext {
             let mut draw_ctx = draw_ctx.write();
             tool_ctx.remove_pointer_id(e.pointer_id());
             draw_ctx.mouse_leave();
+            draw_ctx.clear_edit_drag();
+            draw_ctx.set_edit_near(None);
             tool_ctx.last_mouse_pos = None;
         }
 
