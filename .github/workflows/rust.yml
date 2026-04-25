@@ -26,7 +26,8 @@ jobs:
         uses: cargo-bins/cargo-binstall@main
       - name: Build
         run: |
-          cargo binstall dioxus-cli -y --force
+          # cargo binstall dioxus-cli -y --force
+          cargo install dioxus-cli
           dx bundle --release --desktop --package-types "appimage"
       # - name: Bundle WebKit helper processes into AppImage
       #   run: |
