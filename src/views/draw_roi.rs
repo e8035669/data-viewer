@@ -40,7 +40,6 @@ enum GestureMode {
     #[default]
     None,
     Pan,
-    EditHover,
     DragPoint(usize),
     Draw,
     Zoom,
@@ -669,10 +668,6 @@ impl DrawContext {
         near
     }
 
-    fn begin_edit_drag(&mut self, display_radius_px: f64) -> Option<usize> {
-        self.update_edit_near_point(display_radius_px)
-    }
-
     fn update_dragging_edit_point(
         &mut self,
         drag_idx: usize,
@@ -903,14 +898,19 @@ impl DrawRoiContext {
             match clicked_ids.len() {
                 0 => GestureMode::None,
                 1 => match mode {
+                    // 現在是繪圖工具 按下就準備開始繪圖
                     ToolMode::Draw => GestureMode::Draw,
-                    ToolMode::Edit => match draw_ctx.write().begin_edit_drag(12.0) {
+                    // 現在是修改工具 按下就依目前選擇的ROI 試圖尋找最近的其中一點
+                    // 沒有點的話就平移模式
+                    ToolMode::Edit => match draw_ctx.write().update_edit_near_point(12.0) {
                         Some(idx) => GestureMode::DragPoint(idx),
-                        None => GestureMode::EditHover,
+                        None => GestureMode::Pan,
                     },
+                    // 其餘狀況摸到螢幕也是平移
                     _ => GestureMode::Pan,
                 },
                 2 => {
+                    // 兩指一律變成縮放模式
                     let p1 = tool_ctx
                         .last_pointer_pos
                         .get(&clicked_ids[0])
@@ -937,6 +937,7 @@ impl DrawRoiContext {
         let xy = e.element_coordinates();
         let movement = tool_ctx.read().get_movement(e.pointer_id(), xy.to_tuple());
         let current_gesture = tool_ctx.read().gesture;
+        // 手指或滑鼠移動中 記錄軌跡和最後的點
         tool_ctx
             .write()
             .update_last_pos(e.pointer_id(), xy.to_tuple(), e.held_buttons());
@@ -954,15 +955,13 @@ impl DrawRoiContext {
 
             match current_gesture {
                 GestureMode::Pan => {
+                    // 現在是平移模式 把畫布平移
                     let draw_ctx = self.draw_ctx;
                     let move_canvas_xy = draw_ctx.read().to_canvas_pos(movement.0, movement.1);
                     self.add_offset_xy(move_canvas_xy.0, move_canvas_xy.1);
                 }
-                GestureMode::EditHover => {
-                    let mut draw_ctx = self.draw_ctx;
-                    draw_ctx.write().update_edit_near_point(12.0);
-                }
                 GestureMode::DragPoint(idx) => {
+                    // 現在是修改模式 修改正在抓著的點
                     let mut draw_ctx = self.draw_ctx;
                     moved_edit_roi = draw_ctx.write().update_dragging_edit_point(idx);
                 }
@@ -971,6 +970,7 @@ impl DrawRoiContext {
         }
 
         if let GestureMode::Zoom = current_gesture {
+            // 現在是縮放模式 做雙指縮放
             let tool_ctx_copy = tool_ctx();
             let clicked_ids = tool_ctx_copy.primary_buttons.clone();
             if clicked_ids.len() >= 2 {
@@ -989,9 +989,11 @@ impl DrawRoiContext {
             }
         }
 
+        // 更新最後的點 好像用不到了 可能可以移除
         tool_ctx.write().last_mouse_pos = Some((xy.x, xy.y));
 
         if let Some((roi_name, points)) = moved_edit_roi {
+            // 滑鼠移動的過程 有修改既有的ROI點 需要同步那一個被修改的ROI
             let draw_proxy = self.draw_proxy;
             let draw_proxy = draw_proxy();
             let draw_ctx = self.draw_ctx;
@@ -1031,6 +1033,8 @@ impl DrawRoiContext {
             let first_id = tool_ctx.get_first_id();
             if let Some(first_id) = first_id {
                 if first_id == e.pointer_id() {
+                    // 是第一根手指放開 尋找手指放開的過程中 可信度最高的點
+                    // 避免手指放開瞬間漂移
                     stable_release_xy = Some(tool_ctx.choose_stable_release_coord(
                         e.pointer_id(),
                         xy.to_tuple(),
@@ -1040,6 +1044,7 @@ impl DrawRoiContext {
             }
 
             if tool_ctx.gesture == GestureMode::Draw {
+                // 現在正在繪圖 下好離手 會新增一個點
                 let first_id = tool_ctx.get_first_id().unwrap();
                 if first_id == e.pointer_id() {
                     let stable_release_xy = stable_release_xy.unwrap_or_else(|| {
@@ -1059,7 +1064,7 @@ impl DrawRoiContext {
                     let now = OffsetDateTime::now_utc();
                     if let Some(last_click_time) = tool_ctx.last_click_time {
                         if now - last_click_time < time::Duration::milliseconds(500) {
-                            // 觸發雙擊
+                            // 觸發雙擊 封閉ROI
                             draw_ctx.pop_last_point(2);
                             draw_ctx.close_current_roi();
                         }
@@ -1071,6 +1076,7 @@ impl DrawRoiContext {
             }
 
             if let GestureMode::DragPoint(drag_idx) = tool_ctx.gesture {
+                // 現在正在抓取某個點的放開瞬間 對該點做最後更新
                 let first_id = tool_ctx.get_first_id().unwrap();
                 if first_id == e.pointer_id() {
                     let stable_xy = stable_release_xy.unwrap_or_else(|| {
@@ -1085,35 +1091,22 @@ impl DrawRoiContext {
                     let mut draw_ctx = draw_ctx.write();
                     draw_ctx.update_mouse_xy(stable_xy.0, stable_xy.1);
                     moved_edit_roi_on_up = draw_ctx.update_dragging_edit_point(drag_idx);
-                    draw_ctx.update_edit_near_point(12.0);
                 }
             }
 
             match tool_ctx.primary_buttons.len() {
                 0 => {
+                    // 從1指放開變成0指 變成沒有手勢
                     tool_ctx.gesture = GestureMode::None;
                 }
                 1 => {
-                    tool_ctx.gesture = if tool_ctx.mode == ToolMode::Edit {
-                        GestureMode::EditHover
-                    } else {
-                        GestureMode::Pan
-                    };
+                    // 從2指放開變成1指 無論是修改或是繪圖工具 都應該變成平移 否則會誤畫
+                    tool_ctx.gesture = GestureMode::Pan;
                 }
                 _ => {
+                    // 有手指放開仍然是多指 那就繼續縮放模式
                     tool_ctx.gesture = GestureMode::Zoom;
                 }
-            }
-        }
-
-        {
-            let mut draw_ctx = self.draw_ctx;
-            let mut draw_ctx = draw_ctx.write();
-            if let HightlightStatus::Edit(_) = draw_ctx.highlight {
-                if let Some((x, y)) = stable_release_xy {
-                    draw_ctx.update_mouse_xy(x, y);
-                }
-                draw_ctx.update_edit_near_point(12.0);
             }
         }
 
