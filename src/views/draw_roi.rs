@@ -1,7 +1,6 @@
-use std::{default, time::Duration};
+use std::time::Duration;
 
 use crate::components::{
-    aspect_ratio::AspectRatio,
     button::{Button, ButtonVariant},
     input::Input,
     scroll_area::ScrollArea,
@@ -23,9 +22,9 @@ use dioxus_primitives::{
     scroll_area::ScrollDirection,
     toast::{use_toast, ToastOptions},
 };
-use euclid::{point2, size2, Point2D, UnknownUnit};
+use euclid::{point2, size2, Point2D};
 use indexmap::{IndexMap, IndexSet};
-use time::{OffsetDateTime, PrimitiveDateTime, Time};
+use time::OffsetDateTime;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolMode {
@@ -514,10 +513,14 @@ impl DrawContext {
         self.drawed_rois.is_empty()
     }
 
-    fn canvas_resize(&mut self, e: &ResizeEvent) {
-        let s = e.get_content_box_size().unwrap();
-        self.display_height = s.height;
-        self.display_width = s.width;
+    fn display_resize(&mut self, display_width: f64, display_height: f64) {
+        self.display_height = display_height;
+        self.display_width = display_width;
+    }
+
+    fn canvas_resize(&mut self, canvas_width: f64, canvas_height: f64) {
+        self.canvas_width = canvas_width;
+        self.canvas_height = canvas_height;
     }
 
     fn canvas_wheel(&mut self, delta: f64) {
@@ -1036,6 +1039,29 @@ impl DrawRoiContext {
             .execute(&draw_proxy)
             .await;
     }
+
+    fn canvas_resize(&self, display_width: f64, display_height: f64) -> (i32, i32) {
+        // 計算寬高比
+        let aspect_ratio = display_width / display_height;
+
+        // 根據寬高比決定 canvas 內部尺寸
+        let (new_canvas_width, new_canvas_height) = if aspect_ratio > 1.5 {
+            // 寬屏（電腦：16:9）
+            (1920, 1080)
+        } else {
+            // 接近正方形或竪屏（手機）
+            (1920, 1920)
+        };
+
+        // 更新 DrawContext
+        let mut draw_ctx = self.draw_ctx;
+        {
+            let mut draw_ctx = draw_ctx.write();
+            draw_ctx.display_resize(display_width, display_height);
+            draw_ctx.canvas_resize(new_canvas_width as f64, new_canvas_height as f64);
+        }
+        (new_canvas_width, new_canvas_height)
+    }
 }
 
 fn roi_to_string(roi: &Vec<Point2D<i32, Pixel>>) -> String {
@@ -1154,8 +1180,8 @@ pub fn DrawRoiPage() -> Element {
         let img_str =
             String::from("data:image/jpeg;base64,") + BASE64_STANDARD.encode(image_data).as_str();
         selected_file.set(img_str);
-    selected_file_name.set(file.name());
-    toast_api.success(
+        selected_file_name.set(file.name());
+        toast_api.success(
             "圖片匯入成功".to_string(),
             ToastOptions::new().duration(Duration::from_secs(3)),
         );
@@ -1409,6 +1435,27 @@ pub fn DrawRoiPage() -> Element {
         draw_roi_ctx.canvas_pointer_leave(&e).await;
     };
 
+    let on_canvas_resize = move |e: ResizeEvent| async move {
+        tracing::info!("canvas.onresize {:?}", e.data());
+        let s = e.get_content_box_size().unwrap();
+
+        let (new_canvas_w, new_canvas_h) = draw_roi_ctx.canvas_resize(s.width, s.height);
+
+        canvas_width.set(new_canvas_w);
+        canvas_height.set(new_canvas_h);
+    };
+
+    let on_canvas_mounted = move |_e: MountedEvent| async move {
+        loop {
+            let draw_proxy = draw_roi_ctx.draw_proxy;
+            let ret = draw_proxy().init().await;
+            if ret {
+                break;
+            }
+            sleep(Duration::from_secs(2)).await;
+        }
+    };
+
     let drawed_rois = draw_ctx.read().get_drawed_rois();
     let all_rois = rois_to_string(&drawed_rois);
 
@@ -1548,44 +1595,8 @@ pub fn DrawRoiPage() -> Element {
                         onpointerup: on_pointer_up,
                         onpointercancel: on_pointer_cancel,
                         onpointerleave: on_pointer_leave,
-
-                        onresize: move |e| async move {
-                            tracing::info!("canvas.onresize {:?}", e.data());
-                            let s = e.get_content_box_size().unwrap();
-                            let display_width = s.width;
-                            let display_height = s.height;
-
-                            // 計算寬高比
-                            let aspect_ratio = display_width / display_height;
-
-                            // 根據寬高比決定 canvas 內部尺寸
-                            let (new_canvas_width, new_canvas_height) = if aspect_ratio > 1.5 {
-                                // 寬屏（電腦：16:9）
-                                (1920, 1080)
-                            } else {
-                                // 接近正方形或竪屏（手機）
-                                (1920, 1920)
-                            };
-
-                            canvas_width.set(new_canvas_width);
-                            canvas_height.set(new_canvas_height);
-
-                            // 更新 DrawContext
-                            let mut draw_ctx_mut = draw_roi_ctx.draw_ctx;
-                            draw_ctx_mut.write().canvas_resize(&e);
-                            draw_ctx_mut.write().canvas_width = new_canvas_width as f64;
-                            draw_ctx_mut.write().canvas_height = new_canvas_height as f64;
-                        },
-                        onmounted: move |_| async move {
-                            loop {
-                                let draw_proxy = draw_roi_ctx.draw_proxy;
-                                let ret = draw_proxy().init().await;
-                                if ret {
-                                    break;
-                                }
-                                sleep(Duration::from_secs(2)).await;
-                            }
-                        },
+                        onresize: on_canvas_resize,
+                        onmounted: on_canvas_mounted,
                     }
 
                     canvas {
@@ -1633,9 +1644,10 @@ pub fn DrawRoiPage() -> Element {
                     }
                     Button {
                         onclick: move |_| async move {
-                            let prog = "navigator.clipboard.writeText(document.getElementById('all_rois').textContent);"
+                            let prog = r#"navigator.clipboard.writeText(document.getElementById('all_rois').textContent);return 'OK';"#
                                 .to_string();
-                            let _ = document::eval(&prog).await;
+                            let ret = document::eval(&prog).await;
+                            tracing::info!("Copy ROI: {:?}", ret);
                             toast_api
                                 .success(
                                     "Copy Success!".to_string(),
