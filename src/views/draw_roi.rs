@@ -1124,6 +1124,7 @@ pub fn DrawRoiPage() -> Element {
     let mut selected_file = use_signal(|| String::new());
     let mut roi_import_text = use_signal(|| String::new());
     let mut image_base64_input = use_signal(|| String::new());
+    let mut selected_file_name = use_signal(|| String::new());
     let toast_api = use_toast();
 
     let mut draw_roi_ctx = use_draw_roi_context();
@@ -1153,8 +1154,8 @@ pub fn DrawRoiPage() -> Element {
         let img_str =
             String::from("data:image/jpeg;base64,") + BASE64_STANDARD.encode(image_data).as_str();
         selected_file.set(img_str);
-
-        toast_api.success(
+    selected_file_name.set(file.name());
+    toast_api.success(
             "圖片匯入成功".to_string(),
             ToastOptions::new().duration(Duration::from_secs(3)),
         );
@@ -1186,6 +1187,7 @@ pub fn DrawRoiPage() -> Element {
         let img_str =
             String::from("data:image/jpeg;base64,") + BASE64_STANDARD.encode(image_data).as_str();
         selected_file.set(img_str);
+        selected_file_name.set(file.name());
         toast_api.success(
             "拖放圖片匯入成功".to_string(),
             ToastOptions::new().duration(Duration::from_secs(3)),
@@ -1262,6 +1264,7 @@ pub fn DrawRoiPage() -> Element {
             Ok(image_src) => {
                 selected_file.set(image_src);
                 image_base64_input.set(String::new());
+                selected_file_name.set("Base64 圖片".to_string());
                 toast_api.success(
                     "Base64 圖片匯入成功".to_string(),
                     ToastOptions::new().duration(Duration::from_secs(4)),
@@ -1477,13 +1480,27 @@ pub fn DrawRoiPage() -> Element {
         div { class: "grid grid-cols-1 gap-2",
 
             div {
-                class: "w-full",
+                class: "relative w-full border-2 border-dashed rounded-lg p-6 flex flex-col items-center gap-2 cursor-pointer",
                 ondragover: on_file_drag_over,
                 ondrop: on_file_drop,
-                Input {
-                    class: "input w-full",
+                if selected_file().is_empty() {
+                    div { class: "text-3xl pointer-events-none",
+                        Icon { icon: fa_solid_icons::FaCloudArrowUp }
+                    }
+                    p { class: "text-sm text-center pointer-events-none",
+                        "拖放圖片至此，或點擊選取"
+                    }
+                } else {
+                    div { class: "text-3xl pointer-events-none text-green-500",
+                        Icon { icon: fa_solid_icons::FaCircleCheck }
+                    }
+                    p { class: "text-sm text-center pointer-events-none font-semibold",
+                        "已選取：{selected_file_name}"
+                    }
+                }
+                input {
+                    class: "absolute inset-0 w-full h-full opacity-0 cursor-pointer",
                     r#type: "file",
-                    placeholder: "選取圖片或拖放到這",
                     accept: "image/*",
                     oninput: on_file_input,
                 }
