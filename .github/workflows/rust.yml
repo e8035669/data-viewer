@@ -29,37 +29,37 @@ jobs:
           # cargo binstall dioxus-cli -y --force
           cargo install dioxus-cli
           dx bundle --release --desktop --package-types "appimage"
-      # - name: Bundle WebKit helper processes into AppImage
-      #   run: |
-      #     APPIMAGE=$(ls target/dx/data-viewer/bundle/linux/appimage/*.AppImage | head -1)
-      #     APPIMAGE_NAME=$(basename "$APPIMAGE")
+      - name: Bundle WebKit helper processes into AppImage
+        run: |
+          APPIMAGE=$(ls target/dx/data-viewer/bundle/linux/appimage/*.AppImage | head -1)
+          APPIMAGE_NAME=$(basename "$APPIMAGE")
 
-      #     # Extract the AppImage contents
-      #     "$APPIMAGE" --appimage-extract
-      #     chmod -R u+w squashfs-root
+          # Extract the AppImage contents
+          "$APPIMAGE" --appimage-extract
+          chmod -R u+w squashfs-root
 
-      #     # Copy WebKit helper executables (these are not bundled by dx bundle)
-      #     WEBKIT_LIBEXEC="/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
-      #     DEST="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
-      #     mkdir -p "$DEST"
-      #     for proc in WebKitNetworkProcess WebKitWebProcess WebKitWebDriver; do
-      #       [ -f "$WEBKIT_LIBEXEC/$proc" ] && cp "$WEBKIT_LIBEXEC/$proc" "$DEST/"
-      #     done
+          # Copy WebKit helper executables (these are not bundled by dx bundle)
+          WEBKIT_LIBEXEC="/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+          DEST="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+          mkdir -p "$DEST"
+          for proc in WebKitNetworkProcess WebKitWebProcess WebKitWebDriver; do
+            [ -f "$WEBKIT_LIBEXEC/$proc" ] && cp "$WEBKIT_LIBEXEC/$proc" "$DEST/"
+          done
 
-      #     # Inject WEBKIT_EXEC_PATH into AppRun so WebKit finds the bundled processes
-      #     if ! grep -q 'WEBKIT_EXEC_PATH' squashfs-root/AppRun; then
-      #       sed -i '/^exec /i export WEBKIT_EXEC_PATH="$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"' \
-      #         squashfs-root/AppRun
-      #     fi
+          # Inject WEBKIT_EXEC_PATH into AppRun so WebKit finds the bundled processes
+          if ! grep -q 'WEBKIT_EXEC_PATH' squashfs-root/AppRun; then
+            sed -i '/^exec /i export WEBKIT_EXEC_PATH="$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"' \
+              squashfs-root/AppRun
+          fi
 
-      #     # Repack into a new AppImage
-      #     wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
-      #     chmod +x appimagetool-x86_64.AppImage
-      #     ARCH=x86_64 ./appimagetool-x86_64.AppImage squashfs-root "$APPIMAGE_NAME"
+          # Repack into a new AppImage
+          wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage squashfs-root "$APPIMAGE_NAME"
 
-      #     # Replace original AppImage with the patched one
-      #     mv "$APPIMAGE_NAME" target/dx/data-viewer/bundle/linux/appimage/
-      #     rm -rf squashfs-root appimagetool-x86_64.AppImage
+          # Replace original AppImage with the patched one
+          mv "$APPIMAGE_NAME" target/dx/data-viewer/bundle/linux/appimage/
+          rm -rf squashfs-root appimagetool-x86_64.AppImage
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v7.0.1
         with:
