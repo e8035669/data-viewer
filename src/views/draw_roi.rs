@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use crate::components::{
+use crate::{components::{
     button::{Button, ButtonVariant},
     input::Input,
     scroll_area::ScrollArea,
     toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator},
-};
+}, views::global::HeaderContext};
 use async_std::task::sleep;
 use base64::prelude::*;
 use dioxus::{
@@ -28,10 +28,14 @@ use time::OffsetDateTime;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolMode {
+    /// 檢視工具, 僅能查看目前畫的ROI
     View,
+    /// 繪畫工具, 用滑鼠畫圖或用手指畫圖
     #[default]
     Draw,
+    /// 修改工具, 修改目前已經現存的ROI, 僅能調整位置, 目前還不能新增或刪除點位
     Edit,
+    /// 刪除工具, 可以選擇ROI並刪除
     Delete,
 }
 
@@ -1339,6 +1343,9 @@ fn normalize_base64_image_input(raw: &str) -> Result<String, String> {
 
 #[component]
 pub fn DrawRoiPage() -> Element {
+    use_effect(|| {
+        consume_context::<HeaderContext>().set_title("Draw ROI");
+    });
     let mut selected_file = use_signal(|| String::new());
     let mut roi_import_text = use_signal(|| String::new());
     let mut image_base64_input = use_signal(|| String::new());
