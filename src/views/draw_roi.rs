@@ -1720,7 +1720,6 @@ pub fn DrawRoiPage() -> Element {
     let canvas_api = asset!("/assets/canvas-api.js");
 
     rsx! {
-        p { "🚧施工中🚧" }
         script { src: canvas_api }
 
         img {

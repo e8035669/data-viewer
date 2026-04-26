@@ -27,6 +27,7 @@ pub fn Navbar() -> Element {
     let projects = use_context::<Signal<Projects>>();
     let keys = use_memo(move || projects().keys().cloned().collect::<Vec<String>>());
     let header_ctx = use_context::<HeaderContext>();
+    let version = env!("CARGO_PKG_VERSION");
 
     rsx! {
         // document::Link { rel: "stylesheet", href: NAVBAR_CSS }
@@ -151,7 +152,9 @@ pub fn Navbar() -> Element {
                         }
                     }
                 }
-                SidebarFooter {}
+                SidebarFooter {
+                    span { class: "text-xs text-muted-foreground px-2 py-1", "v{version}" }
+                }
                 SidebarRail {}
             }
 
