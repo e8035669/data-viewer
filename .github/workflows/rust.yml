@@ -33,12 +33,14 @@ jobs:
         run: |
           APPIMAGE=$(ls target/dx/data-viewer/bundle/linux/appimage/*.AppImage | head -1)
           APPIMAGE_NAME=$(basename "$APPIMAGE")
+          APPIMAGE_DIR=$(dirname "$APPIMAGE")
 
-          # Extract the AppImage contents
+          # Extract the AppImage into a re-usable AppDir
           "$APPIMAGE" --appimage-extract
           chmod -R u+w squashfs-root
 
-          # Copy WebKit helper executables and injected bundle (these are not bundled by dx bundle)
+          # Copy WebKit helper executables BEFORE running linuxdeploy so that
+          # linuxdeploy + gtk plugin can resolve their .so dependencies via ldd
           # See: https://github.com/tauri-apps/tauri/blob/dev/crates/tauri-bundler/src/bundle/linux/appimage/linuxdeploy.rs
           WEBKIT_LIBEXEC="/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
           DEST="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
@@ -49,25 +51,29 @@ jobs:
           [ -f "$WEBKIT_LIBEXEC/injected-bundle/libwebkit2gtkinjectedbundle.so" ] && \
             cp "$WEBKIT_LIBEXEC/injected-bundle/libwebkit2gtkinjectedbundle.so" "$DEST/injected-bundle/"
 
-          # Binary-patch absolute /usr paths in libwebkit*.so to relative paths (././)
-          # This allows WebKit to find its helper processes from $APPDIR instead of the system path
-          # See: https://github.com/tauri-apps/tauri/issues/2805
-          find squashfs-root/usr/lib* -name 'libwebkit*' -exec sed -i -e "s|/usr|././|g" '{}' \;
+          # Download linuxdeploy and Tauri's gtk plugin
+          # Tauri's gtk plugin does everything needed for webkit to work cross-distro:
+          #   - resolves .so deps of all webkit helpers via ldd (in plugin mode)
+          #   - binary-patches libwebkit*.so: s|/usr|././|g so paths are AppDir-relative
+          #   - adds apprun-hooks that set GDK_BACKEND=x11, GSETTINGS_SCHEMA_DIR,
+          #     XDG_DATA_DIRS, GIO_EXTRA_MODULES (TLS), GDK_PIXBUF_MODULE_FILE, etc.
+          wget -q "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage"
+          wget -q -O linuxdeploy-plugin-gtk.sh \
+            "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
 
-          # Inject WEBKIT_EXEC_PATH into AppRun so WebKit finds the bundled processes
-          if ! grep -q 'WEBKIT_EXEC_PATH' squashfs-root/AppRun; then
-            sed -i '/^exec /i export WEBKIT_EXEC_PATH="$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"' \
-              squashfs-root/AppRun
-          fi
+          # Re-run linuxdeploy + gtk plugin on the extracted AppDir and produce
+          # the final AppImage at the original path
+          PATH="$PWD:$PATH" \
+          OUTPUT="$APPIMAGE_DIR/$APPIMAGE_NAME" \
+          LINUXDEPLOY="$PWD/linuxdeploy-x86_64.AppImage" \
+          APPIMAGE_EXTRACT_AND_RUN=1 \
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir squashfs-root \
+            --plugin gtk \
+            --output appimage
 
-          # Repack into a new AppImage
-          wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
-          chmod +x appimagetool-x86_64.AppImage
-          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool-x86_64.AppImage squashfs-root "$APPIMAGE_NAME"
-
-          # Replace original AppImage with the patched one
-          mv "$APPIMAGE_NAME" target/dx/data-viewer/bundle/linux/appimage/
-          rm -rf squashfs-root appimagetool-x86_64.AppImage
+          rm -rf squashfs-root linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v7.0.1
         with:
