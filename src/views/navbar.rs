@@ -95,11 +95,11 @@ pub fn Navbar() -> Element {
                                     icon: fa_solid_icons::FaHeartPulse,
                                     "Monitor Devices"
                                 }
-                            }
-                            SidebarLink {
-                                to: Route::DrawRoiPage {},
-                                icon: fa_solid_icons::FaDrawPolygon,
-                                "Draw ROI"
+                                SidebarLink {
+                                    to: Route::DrawRoiPage {},
+                                    icon: fa_solid_icons::FaDrawPolygon,
+                                    "Draw ROI"
+                                }
                             }
                         }
                     }
@@ -120,33 +120,34 @@ pub fn Navbar() -> Element {
                     SidebarGroup {
                         SidebarGroupLabel { "Other" }
                         SidebarContent {
-                            SidebarLink {
-                                to: Route::Blog { id: 1 },
-                                icon: fa_solid_icons::FaHouse,
-                                "Blog"
-                            }
-                            SidebarLink {
-                                to: Route::SensorPanel {},
-                                icon: fa_solid_icons::FaHouse,
-                                "Sensor"
-                            }
-                            SidebarLink {
-                                to: Route::Storage {},
-                                icon: fa_solid_icons::FaLink,
-                                "Storage"
-                            }
-                            SidebarLink {
-                                to: Route::Storage2 {},
-                                icon: fa_solid_icons::FaLink,
-                                "Storage2"
-                            }
+                            SidebarMenu {
+                                SidebarLink {
+                                    to: Route::Blog { id: 1 },
+                                    icon: fa_solid_icons::FaHouse,
+                                    "Blog"
+                                }
+                                SidebarLink {
+                                    to: Route::SensorPanel {},
+                                    icon: fa_solid_icons::FaHouse,
+                                    "Sensor"
+                                }
+                                SidebarLink {
+                                    to: Route::Storage {},
+                                    icon: fa_solid_icons::FaLink,
+                                    "Storage"
+                                }
+                                SidebarLink {
+                                    to: Route::Storage2 {},
+                                    icon: fa_solid_icons::FaLink,
+                                    "Storage2"
+                                }
 
-                            SidebarLink {
-                                to: Route::TestRule1 {},
-                                icon: fa_solid_icons::FaLink,
-                                "TestRule1"
+                                SidebarLink {
+                                    to: Route::TestRule1 {},
+                                    icon: fa_solid_icons::FaLink,
+                                    "TestRule1"
+                                }
                             }
-                        
                         }
                     }
                 }
