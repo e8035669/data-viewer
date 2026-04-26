@@ -45,6 +45,7 @@ jobs:
           # Extract the AppImage into a re-usable AppDir
           "$APPIMAGE" --appimage-extract
           chmod -R u+w squashfs-root
+          ln -s usr/lib squashfs-root/lib
 
           # Copy WebKit helper executables BEFORE running linuxdeploy so that
           # linuxdeploy + gtk plugin can resolve their .so dependencies via ldd
