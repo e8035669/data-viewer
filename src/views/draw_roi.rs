@@ -1,11 +1,14 @@
 use std::time::Duration;
 
-use crate::{components::{
-    button::{Button, ButtonVariant},
-    input::Input,
-    scroll_area::ScrollArea,
-    toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator},
-}, views::global::HeaderContext};
+use crate::{
+    components::{
+        button::{Button, ButtonVariant},
+        input::Input,
+        scroll_area::ScrollArea,
+        toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator},
+    },
+    views::global::HeaderContext,
+};
 use async_std::task::sleep;
 use base64::prelude::*;
 use dioxus::{
@@ -637,8 +640,12 @@ impl DrawContext {
         let mouse_canvas = self.mouse_canvas_xy?;
         let roi = self.drawed_rois.get(target)?;
 
-        let radius_x = self.display_px_to_canvas_x(display_radius_px).max(f64::EPSILON);
-        let radius_y = self.display_px_to_canvas_y(display_radius_px).max(f64::EPSILON);
+        let radius_x = self
+            .display_px_to_canvas_x(display_radius_px)
+            .max(f64::EPSILON);
+        let radius_y = self
+            .display_px_to_canvas_y(display_radius_px)
+            .max(f64::EPSILON);
 
         let mut best: Option<(usize, f64)> = None;
         for (idx, point) in roi.iter().enumerate() {
@@ -1724,6 +1731,84 @@ pub fn DrawRoiPage() -> Element {
         }
 
         div { class: "grid grid-cols-1 gap-2",
+
+            // 使用說明
+            details { class: "border rounded-lg group",
+                summary { class: "px-4 py-3 font-semibold text-sm cursor-pointer select-none flex items-center gap-2",
+                    Icon {
+                        icon: fa_solid_icons::FaCircleInfo,
+                        width: 14,
+                        height: 14,
+                    }
+                    "使用說明"
+                }
+                div { class: "px-4 pb-4 pt-3 border-t space-y-3 text-sm",
+                    div { class: "space-y-2",
+                        p { class: "font-medium", "操作流程" }
+                        ol { class: "list-decimal list-inside space-y-2 text-muted-foreground",
+                            li {
+                                strong { "上傳圖片：" }
+                                "拖放或點擊上方區域選取圖片，亦可貼上 Base64 字串匯入。"
+                            }
+                            li {
+                                "切換至「繪圖模式」（"
+                                Icon {
+                                    icon: fa_solid_icons::FaDrawPolygon,
+                                    width: 12,
+                                    height: 12,
+                                    style: "display:inline-block;vertical-align:middle",
+                                }
+                                "），在畫布上"
+                                strong { "單擊" }
+                                "新增頂點，"
+                                strong { "雙擊" }
+                                "閉合多邊形完成一個 ROI。"
+                            }
+                            li {
+                                "切換至「修改模式」（"
+                                Icon {
+                                    icon: fa_solid_icons::FaPenToSquare,
+                                    width: 12,
+                                    height: 12,
+                                    style: "display:inline-block;vertical-align:middle",
+                                }
+                                "），從右側 ROI 列表點選目標後，"
+                                strong { "拖曳頂點" }
+                                "調整位置。"
+                            }
+                            li {
+                                "切換至「刪除模式」（"
+                                Icon {
+                                    icon: fa_solid_icons::FaTrashCan,
+                                    width: 12,
+                                    height: 12,
+                                    style: "display:inline-block;vertical-align:middle",
+                                }
+                                "），從 ROI 列表點選刪除按鈕移除 ROI。"
+                            }
+                            li {
+                                "完成後，複製下方「完整 ROI 資料」字串；下次可貼入「ROI 清單字串」欄位以匯入既有資料。"
+                            }
+                        }
+                    }
+                    div { class: "border rounded p-3 space-y-1 bg-muted/40 text-xs text-muted-foreground",
+                        p { class: "font-medium text-foreground mb-1", "快捷操作" }
+                        p { "• 滑鼠滾輪：縮放畫布" }
+                        p { "• 在檢視／繪圖模式下，按住左鍵拖曳：平移畫布" }
+                        p { "• 觸控裝置：單指拖曳平移、雙指捏合縮放" }
+                        p {
+                            "• 復原（"
+                            Icon {
+                                icon: fa_solid_icons::FaRotateLeft,
+                                width: 10,
+                                height: 10,
+                                style: "display:inline-block;vertical-align:middle",
+                            }
+                            "）：移除最後一個未閉合的頂點"
+                        }
+                    }
+                }
+            }
 
             div {
                 class: "relative w-full border-2 border-dashed rounded-lg p-6 flex flex-col items-center gap-2 cursor-pointer",
