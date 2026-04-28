@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl wget file \
+            libxdo-dev libssl-dev librsvg2-dev lld patchelf \
+            libappindicator3-dev \
+            libwebkit2gtk-4.1-0=2.44.0-2 \
+            libwebkit2gtk-4.1-dev=2.44.0-2 \
+            libjavascriptcoregtk-4.1-0=2.44.0-2 \
+            libjavascriptcoregtk-4.1-dev=2.44.0-2 \
+            gir1.2-javascriptcoregtk-4.1=2.44.0-2 \
+            gir1.2-webkit2-4.1=2.44.0-2
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Build
+        run: |
+          cargo binstall dioxus-cli -y --force
+          dx bundle --release --desktop --package-types "appimage"
+      - name: Bundle WebKit helper processes into AppImage
+        run: |
+          APPIMAGE=$(ls target/dx/data-viewer/bundle/linux/appimage/*.AppImage | head -1)
+          APPIMAGE_NAME=$(basename "$APPIMAGE")
+          APPIMAGE_DIR=$(dirname "$APPIMAGE")
+
+          "$APPIMAGE" --appimage-extract
+          chmod -R u+w squashfs-root
+          ln -s usr/lib squashfs-root/lib
+
+          WEBKIT_LIBEXEC="/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+          DEST="squashfs-root/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
+          mkdir -p "$DEST/injected-bundle"
+          for proc in WebKitNetworkProcess WebKitWebProcess WebKitWebDriver; do
+            [ -f "$WEBKIT_LIBEXEC/$proc" ] && cp "$WEBKIT_LIBEXEC/$proc" "$DEST/"
+          done
+          [ -f "$WEBKIT_LIBEXEC/injected-bundle/libwebkit2gtkinjectedbundle.so" ] && \
+            cp "$WEBKIT_LIBEXEC/injected-bundle/libwebkit2gtkinjectedbundle.so" "$DEST/injected-bundle/"
+
+          wget -q "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage"
+          wget -q -O linuxdeploy-plugin-gtk.sh \
+            "https://raw.githubusercontent.com/Oxygem/Kanmail/cf6fd0050fd02fbeea518a38e8a60312ccee78a5/build/linux/linuxdeploy-plugin-gtk.sh"
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
+
+          PATH="$PWD:$PATH" \
+          OUTPUT="$APPIMAGE_DIR/$APPIMAGE_NAME" \
+          LINUXDEPLOY="$PWD/linuxdeploy-x86_64.AppImage" \
+          APPIMAGE_EXTRACT_AND_RUN=1 \
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir squashfs-root \
+            --plugin gtk \
+            --output appimage
+
+          rm -rf squashfs-root linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
+      - name: Create Release and Upload AppImage
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/dx/data-viewer/bundle/linux/appimage/*.AppImage
+          generate_release_notes: true

@@ -1703,14 +1703,14 @@ pub fn DrawRoiPage() -> Element {
                 }
                 div { class: if draw_roi_ctx.tool_ctx.read().mode == ToolMode::Delete { "shrink-0" } else { "shrink-0 hidden" },
                     Button {
-                        variant: ButtonVariant::Secondary,
+                        variant: ButtonVariant::Destructive,
                         onclick: move |_| {
                             let k = k2.clone();
                             async move {
                                 draw_roi_ctx.remove_drawed_roi(&k).await;
                             }
                         },
-                        Icon { icon: fa_solid_icons::FaSquareMinus }
+                        Icon { icon: fa_solid_icons::FaTrashCan }
                     }
                 }
             }
@@ -1951,17 +1951,39 @@ fn ToggleToolbarButton(
     index: usize,
     is_on: bool,
     on_click: Callback<()>,
+    tooltip: Option<String>,
     children: Element,
 ) -> Element {
     rsx! {
-        ToolbarButton {
-            index,
-            on_click,
-            style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
-            "data-state": if is_on { "on" } else { "off" },
-            background: if is_on { "var(--light, var(--primary-color-5)) var(--dark, var(--primary-color-6))" } else { "" },
-            color: if is_on { "var(--secondary-color-1)" } else { "" },
-            {children}
+        div { title: tooltip,
+            ToolbarButton {
+                index,
+                on_click,
+                style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                "data-state": if is_on { "on" } else { "off" },
+                background: if is_on { "var(--light, var(--primary-color-5)) var(--dark, var(--primary-color-6))" } else { "" },
+                color: if is_on { "var(--secondary-color-1)" } else { "" },
+                {children}
+            }
+        }
+    }
+}
+
+#[component]
+fn TooltipToolbarButton(
+    index: usize,
+    on_click: Callback<()>,
+    tooltip: Option<String>,
+    children: Element,
+) -> Element {
+    rsx! {
+        div { title: tooltip,
+            ToolbarButton {
+                index,
+                on_click,
+                style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                {children}
+            }
         }
     }
 }
@@ -1977,6 +1999,7 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                     on_click: move || async move {
                         draw_roi_ctx.set_tool_mode(ToolMode::View).await;
                     },
+                    tooltip: "平移模式\n僅能查看ROI",
                     Icon { icon: fa_solid_icons::FaHand }
                 }
                 ToggleToolbarButton {
@@ -1985,6 +2008,7 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                     on_click: move || async move {
                         draw_roi_ctx.set_tool_mode(ToolMode::Draw).await;
                     },
+                    tooltip: "繪圖模式\n點一下繪圖, 點兩下封閉圖形",
                     Icon { icon: fa_solid_icons::FaDrawPolygon }
                 }
                 ToggleToolbarButton {
@@ -1993,6 +2017,7 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                     on_click: move || async move {
                         draw_roi_ctx.set_tool_mode(ToolMode::Edit).await;
                     },
+                    tooltip: "修改模式\n下方清單選擇修改目標",
                     Icon { icon: fa_solid_icons::FaPenToSquare }
                 }
                 ToggleToolbarButton {
@@ -2001,6 +2026,7 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                     on_click: move || async move {
                         draw_roi_ctx.set_tool_mode(ToolMode::Delete).await;
                     },
+                    tooltip: "刪除模式",
                     Icon { icon: fa_solid_icons::FaTrashCan }
                 }
             }
@@ -2008,28 +2034,28 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
             ToolbarSeparator { horizontal }
 
             ToolbarGroup {
-                ToolbarButton {
+                TooltipToolbarButton {
                     index: 4usize,
                     on_click: move || async move {
                         draw_roi_ctx.undo_last_point().await;
                     },
-                    style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                    tooltip: "復原\n移除最後一個未閉合的頂點",
                     Icon { icon: fa_solid_icons::FaRotateLeft }
                 }
-                ToolbarButton {
+                TooltipToolbarButton {
                     index: 5usize,
                     on_click: move || async move {
                         draw_roi_ctx.zoom_in().await;
                     },
-                    style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                    tooltip: "放大畫布",
                     Icon { icon: fa_solid_icons::FaMagnifyingGlassPlus }
                 }
-                ToolbarButton {
+                TooltipToolbarButton {
                     index: 6usize,
                     on_click: move || async move {
                         draw_roi_ctx.zoom_out().await;
                     },
-                    style: "width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center;",
+                    tooltip: "縮小畫布",
                     Icon { icon: fa_solid_icons::FaMagnifyingGlassMinus }
                 }
             }
