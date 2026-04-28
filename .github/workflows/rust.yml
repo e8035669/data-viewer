@@ -114,9 +114,9 @@ jobs:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
         run: |
           cargo binstall dioxus-cli -y --force
-          dx bundle --release --platform android
+          dx bundle --release --platform android --package-types apk
       - name: Upload APK
         uses: actions/upload-artifact@v7.0.1
         with:
           name: android-apk
-          path: target/dx/data-viewer/bundle/android/**/*.apk
+          path: target/dx/data-viewer/release/android/**/*.apk
