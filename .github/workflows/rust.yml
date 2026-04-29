@@ -116,15 +116,13 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > /tmp/keystore.jks
-          cat >> Dioxus.toml <<EOF
-
-          [bundle.android]
-          jks_file = "/tmp/keystore.jks"
-          jks_password = "${ANDROID_KEYSTORE_PASSWORD}"
-          key_alias = "${ANDROID_KEY_ALIAS}"
-          key_password = "${ANDROID_KEY_PASSWORD}"
-          EOF
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > keystore.jks
+          echo "" >> Dioxus.toml
+          echo "[bundle.android]" >> Dioxus.toml
+          echo "jks_file = \"keystore.jks\"" >> Dioxus.toml
+          echo "jks_password = \"${ANDROID_KEYSTORE_PASSWORD}\"" >> Dioxus.toml
+          echo "key_alias = \"${ANDROID_KEY_ALIAS}\"" >> Dioxus.toml
+          echo "key_password = \"${ANDROID_KEY_PASSWORD}\"" >> Dioxus.toml
       - name: Build signed APK
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
@@ -133,7 +131,7 @@ jobs:
           dx bundle --release --platform android --package-types apk
       - name: Clean up keystore
         if: always()
-        run: rm -f /tmp/keystore.jks
+        run: rm -f keystore.jks
       - name: Upload APK
         uses: actions/upload-artifact@v7.0.1
         with:
