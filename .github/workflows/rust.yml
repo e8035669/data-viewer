@@ -109,12 +109,31 @@ jobs:
         run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
-      - name: Build APK
+      - name: Configure Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > /tmp/keystore.jks
+          cat >> Dioxus.toml <<EOF
+
+          [bundle.android]
+          jks_file = "/tmp/keystore.jks"
+          jks_password = "${ANDROID_KEYSTORE_PASSWORD}"
+          key_alias = "${ANDROID_KEY_ALIAS}"
+          key_password = "${ANDROID_KEY_PASSWORD}"
+          EOF
+      - name: Build signed APK
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
         run: |
           cargo binstall dioxus-cli -y --force
           dx bundle --release --platform android --package-types apk
+      - name: Clean up keystore
+        if: always()
+        run: rm -f /tmp/keystore.jks
       - name: Upload APK
         uses: actions/upload-artifact@v7.0.1
         with:
