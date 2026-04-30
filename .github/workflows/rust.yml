@@ -90,6 +90,12 @@ jobs:
 
   android:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target:
+          - aarch64-linux-android
+          - armv7-linux-androideabi
+          - x86_64-linux-android
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -106,7 +112,7 @@ jobs:
             "platforms;android-34" \
             "build-tools;34.0.0"
       - name: Add Rust Android targets
-        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+        run: rustup target add ${{ matrix.target }}
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
       - name: Configure Android signing
@@ -128,12 +134,12 @@ jobs:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
         run: |
           cargo binstall dioxus-cli -y --force
-          dx bundle --release --platform android --package-types apk
+          dx bundle --release --platform android --package-types apk --target ${{ matrix.target }}
       - name: Clean up keystore
         if: always()
         run: rm -f keystore.jks
       - name: Upload APK
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: android-apk
+          name: android-apk-${{ matrix.target }}
           path: target/dx/data-viewer/release/android/**/*.apk
