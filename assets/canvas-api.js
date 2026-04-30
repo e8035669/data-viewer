@@ -1,5 +1,6 @@
 // assets/roi.js
 const roiHandlerProto = {
+    /** @type {HTMLImageElement} */
     image: null,
     /** @type {HTMLCanvasElement} */
     canvas: null,
@@ -262,6 +263,52 @@ const roiHandlerProto = {
         ctx.moveTo(0, canvas.height / 2);
         ctx.lineTo(canvas.width, canvas.height / 2);
         ctx.stroke();
+    },
+
+    export_image() {
+        let canvas = document.createElement('canvas');
+        canvas.height = this.image.naturalHeight || 1080;
+        canvas.width = this.image.naturalWidth || 1920;
+        let ctx = canvas.getContext('2d');
+        ctx.reset()
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (this.image) {
+            ctx.drawImage(this.image, 0, 0);
+        }
+
+        ctx.strokeStyle = "red";
+        ctx.fillStyle = "red";
+        ctx.lineWidth = 4.0;
+        for (const [key, value] of this.drawed_rois) {
+            ctx.beginPath();
+            for (let i = 0; i < value.length; i++) {
+                let p = value[i];
+                let x = p.x
+                let y = p.y
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            for (let i = 0; i < value.length; i++) {
+                let p = value[i];
+                let x = p.x
+                let y = p.y
+                ctx.beginPath();
+                ctx.arc(x, y, 6.0, 0.0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        var link = document.createElement('a');
+        link.download = 'export.png';
+        link.href = canvas.toDataURL()
+        link.click();
     },
 
     helloworld() {

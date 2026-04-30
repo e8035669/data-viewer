@@ -288,6 +288,11 @@ impl DrawProxy {
     async fn execute(&self, command: &str) {
         let _ = document::eval(command).await;
     }
+
+    async fn export_image(&self) {
+        let prog = "window.roiHandler.export_image();".to_string();
+        let _ = document::eval(&prog).await;
+    }
 }
 
 struct DrawCommandBuilder {
@@ -1926,6 +1931,7 @@ pub fn DrawRoiPage() -> Element {
                         }
                     }
                     Button {
+                        title: "複製 ROI 字串",
                         onclick: move |_| async move {
                             let prog = r#"navigator.clipboard.writeText(document.getElementById('all_rois').textContent);return 'OK';"#
                                 .to_string();
@@ -1990,6 +1996,7 @@ fn TooltipToolbarButton(
 
 #[component]
 fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
+    let toast_api = use_toast();
     rsx! {
         Toolbar { horizontal,
             ToolbarGroup {
@@ -2057,6 +2064,26 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                     },
                     tooltip: "縮小畫布",
                     Icon { icon: fa_solid_icons::FaMagnifyingGlassMinus }
+                }
+            }
+
+            ToolbarSeparator { horizontal }
+
+            ToolbarGroup {
+                TooltipToolbarButton {
+                    index: 7usize,
+                    on_click: move || async move {
+                        let draw_proxy = draw_roi_ctx.draw_proxy;
+                        let draw_proxy = draw_proxy();
+                        draw_proxy.export_image().await;
+                        toast_api
+                            .success(
+                                "Export Success!".to_string(),
+                                ToastOptions::new().duration(Duration::from_secs(5)),
+                            );
+                    },
+                    tooltip: "匯出標記 ROI 的圖片",
+                    Icon { icon: fa_solid_icons::FaDownload }
                 }
             }
         }
