@@ -1272,7 +1272,7 @@ pub fn DeviceAttrPanelImpl(
             div { "Name" }
             div {
                 Input {
-                    class: "input w-full",
+                    class: "dx-input w-full",
                     oninput: move |i: FormEvent| { device_info.write().name = i.value() },
                     value: device_info().name,
                 }
@@ -1313,7 +1313,7 @@ pub fn DeviceAttrPanelImpl(
                 div { class: "flex gap-4 mb-8",
                     div { class: "flex flex-1 gap-4 flex-wrap",
                         Input {
-                            class: "input flex-1",
+                            class: "dx-input flex-1",
                             placeholder: "Key",
                             onchange: move |e: FormEvent| {
                                 attributes.write()[i].key = e.value();
@@ -1321,7 +1321,7 @@ pub fn DeviceAttrPanelImpl(
                             value: attr.key.clone(),
                         }
                         Input {
-                            class: "input flex-1",
+                            class: "dx-input flex-1",
 
                             placeholder: "Value",
                             onchange: move |e: FormEvent| {
@@ -1533,7 +1533,7 @@ pub fn SensorAttrPanelImpl(
                     div { class: "flex gap-4 mb-8",
                         div { class: "flex flex-1 gap-4 flex-wrap",
                             Input {
-                                class: "input flex-1",
+                                class: "dx-input flex-1",
                                 placeholder: "Key",
                                 onchange: move |e: FormEvent| {
                                     attributes.write()[i].key = e.value();
@@ -1541,7 +1541,7 @@ pub fn SensorAttrPanelImpl(
                                 value: attr.key.clone(),
                             }
                             Input {
-                                class: "input flex-1",
+                                class: "dx-input flex-1",
 
                                 placeholder: "Value",
                                 onchange: move |e: FormEvent| {

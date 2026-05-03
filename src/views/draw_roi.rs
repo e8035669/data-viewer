@@ -1843,7 +1843,7 @@ pub fn DrawRoiPage() -> Element {
 
             div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
                 Input {
-                    class: "input font-mono",
+                    class: "dx-input font-mono",
                     placeholder: "貼上 Base64 圖片字串（可含 data:image/...;base64, 前綴）",
                     value: image_base64_input(),
                     oninput: on_image_base64_input,
@@ -1857,7 +1857,7 @@ pub fn DrawRoiPage() -> Element {
 
             div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
                 Input {
-                    class: "input font-mono",
+                    class: "dx-input font-mono",
                     placeholder: "貼上 ROI 清單字串",
                     value: roi_import_text(),
                     oninput: on_roi_import_input,

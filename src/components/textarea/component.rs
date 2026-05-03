@@ -41,6 +41,7 @@ pub fn Textarea(
     oncopy: Option<EventHandler<ClipboardEvent>>,
     oncut: Option<EventHandler<ClipboardEvent>>,
     onpaste: Option<EventHandler<ClipboardEvent>>,
+    onmounted: Option<EventHandler<MountedEvent>>,
     #[props(default)] variant: TextareaVariant,
     #[props(extends=GlobalAttributes)]
     #[props(extends=textarea)]
@@ -50,7 +51,7 @@ pub fn Textarea(
     rsx! {
         document::Link { rel: "stylesheet", href: asset!("./style.css") }
         textarea {
-            class: "textarea",
+            class: "dx-textarea",
             "data-slot": "textarea",
             "data-style": variant.class(),
             oninput: move |e| _ = oninput.map(|callback| callback(e)),
@@ -71,6 +72,7 @@ pub fn Textarea(
             oncopy: move |e| _ = oncopy.map(|callback| callback(e)),
             oncut: move |e| _ = oncut.map(|callback| callback(e)),
             onpaste: move |e| _ = onpaste.map(|callback| callback(e)),
+            onmounted: move |e| _ = onmounted.map(|callback| callback(e)),
             ..attributes,
             {children}
         }

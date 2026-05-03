@@ -14,6 +14,7 @@ pub fn Input(
     onkeydown: Option<EventHandler<KeyboardEvent>>,
     onkeypress: Option<EventHandler<KeyboardEvent>>,
     onkeyup: Option<EventHandler<KeyboardEvent>>,
+    onwheel: Option<EventHandler<WheelEvent>>,
     oncompositionstart: Option<EventHandler<CompositionEvent>>,
     oncompositionupdate: Option<EventHandler<CompositionEvent>>,
     oncompositionend: Option<EventHandler<CompositionEvent>>,
@@ -28,7 +29,7 @@ pub fn Input(
     rsx! {
         document::Link { rel: "stylesheet", href: asset!("./style.css") }
         input {
-            class: "input",
+            class: "dx-input",
             oninput: move |e| _ = oninput.map(|callback| callback(e)),
             onchange: move |e| _ = onchange.map(|callback| callback(e)),
             oninvalid: move |e| _ = oninvalid.map(|callback| callback(e)),
@@ -41,6 +42,7 @@ pub fn Input(
             onkeydown: move |e| _ = onkeydown.map(|callback| callback(e)),
             onkeypress: move |e| _ = onkeypress.map(|callback| callback(e)),
             onkeyup: move |e| _ = onkeyup.map(|callback| callback(e)),
+            onwheel: move |e| _ = onwheel.map(|callback| callback(e)),
             oncompositionstart: move |e| _ = oncompositionstart.map(|callback| callback(e)),
             oncompositionupdate: move |e| _ = oncompositionupdate.map(|callback| callback(e)),
             oncompositionend: move |e| _ = oncompositionend.map(|callback| callback(e)),
