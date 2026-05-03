@@ -1,24 +1,47 @@
 use dioxus::prelude::*;
 use dioxus_primitives::select::{
-    self, SelectGroupLabelProps, SelectGroupProps, SelectListProps, SelectOptionProps, SelectProps,
-    SelectTriggerProps, SelectValueProps,
+    self, SelectGroupLabelProps, SelectGroupProps, SelectListProps, SelectMultiProps,
+    SelectOptionProps, SelectProps, SelectTriggerProps, SelectValueProps,
 };
+use dioxus_primitives::{dioxus_attributes::attributes, icon, merge_attributes};
 
 #[component]
 pub fn Select<T: Clone + PartialEq + 'static>(props: SelectProps<T>) -> Element {
+    let base = attributes!(div { class: "dx-select" });
+    let merged = merge_attributes(vec![base, props.attributes]);
+
     rsx! {
         document::Link { rel: "stylesheet", href: asset!("./style.css") }
         select::Select {
-            class: "select",
             value: props.value,
             default_value: props.default_value,
             on_value_change: props.on_value_change,
             disabled: props.disabled,
             name: props.name,
-            placeholder: props.placeholder,
             roving_loop: props.roving_loop,
             typeahead_timeout: props.typeahead_timeout,
-            attributes: props.attributes,
+            attributes: merged,
+            {props.children}
+        }
+    }
+}
+
+#[component]
+pub fn SelectMulti<T: Clone + PartialEq + 'static>(props: SelectMultiProps<T>) -> Element {
+    let base = attributes!(div { class: "dx-select" });
+    let merged = merge_attributes(vec![base, props.attributes]);
+
+    rsx! {
+        document::Link { rel: "stylesheet", href: asset!("./style.css") }
+        select::SelectMulti {
+            values: props.values,
+            default_values: props.default_values,
+            on_values_change: props.on_values_change,
+            disabled: props.disabled,
+            name: props.name,
+            roving_loop: props.roving_loop,
+            typeahead_timeout: props.typeahead_timeout,
+            attributes: merged,
             {props.children}
         }
     }
@@ -26,13 +49,17 @@ pub fn Select<T: Clone + PartialEq + 'static>(props: SelectProps<T>) -> Element 
 
 #[component]
 pub fn SelectTrigger(props: SelectTriggerProps) -> Element {
+    let base = attributes!(button { class: "dx-select-trigger" });
+    let merged = merge_attributes(vec![base, props.attributes]);
+
     rsx! {
-        select::SelectTrigger { class: "select-trigger", attributes: props.attributes,
+        select::SelectTrigger { attributes: merged,
             {props.children}
-            svg {
-                class: "select-expand-icon",
-                view_box: "0 0 24 24",
-                xmlns: "http://www.w3.org/2000/svg",
+            icon::Icon {
+                class: "dx-select-expand-icon",
+                width: "20px",
+                height: "20px",
+                stroke: "var(--primary-color-7)",
                 polyline { points: "6 9 12 15 18 9" }
             }
         }
@@ -42,17 +69,22 @@ pub fn SelectTrigger(props: SelectTriggerProps) -> Element {
 #[component]
 pub fn SelectValue(props: SelectValueProps) -> Element {
     rsx! {
-        select::SelectValue { attributes: props.attributes }
+        select::SelectValue {
+            placeholder: props.placeholder,
+            attributes: props.attributes,
+        }
     }
 }
 
 #[component]
 pub fn SelectList(props: SelectListProps) -> Element {
+    let base = attributes!(div { class: "dx-select-list" });
+    let merged = merge_attributes(vec![base, props.attributes]);
+
     rsx! {
         select::SelectList {
-            class: "select-list",
             id: props.id,
-            attributes: props.attributes,
+            attributes: merged,
             {props.children}
         }
     }
@@ -60,12 +92,14 @@ pub fn SelectList(props: SelectListProps) -> Element {
 
 #[component]
 pub fn SelectGroup(props: SelectGroupProps) -> Element {
+    let base = attributes!(div { class: "dx-select-group" });
+    let merged = merge_attributes(vec![base, props.attributes]);
+
     rsx! {
         select::SelectGroup {
-            class: "select-group",
             disabled: props.disabled,
             id: props.id,
-            attributes: props.attributes,
+            attributes: merged,
             {props.children}
         }
     }
@@ -73,11 +107,13 @@ pub fn SelectGroup(props: SelectGroupProps) -> Element {
 
 #[component]
 pub fn SelectGroupLabel(props: SelectGroupLabelProps) -> Element {
+    let base = attributes!(div { class: "dx-select-group-label" });
+    let merged = merge_attributes(vec![base, props.attributes]);
+
     rsx! {
         select::SelectGroupLabel {
-            class: "select-group-label",
             id: props.id,
-            attributes: props.attributes,
+            attributes: merged,
             {props.children}
         }
     }
@@ -85,9 +121,11 @@ pub fn SelectGroupLabel(props: SelectGroupLabelProps) -> Element {
 
 #[component]
 pub fn SelectOption<T: Clone + PartialEq + 'static>(props: SelectOptionProps<T>) -> Element {
+    let base = attributes!(div { class: "dx-select-option" });
+    let merged = merge_attributes(vec![base, props.attributes]);
+
     rsx! {
         select::SelectOption::<T> {
-            class: "select-option",
             value: props.value,
             text_value: props.text_value,
             disabled: props.disabled,
@@ -95,7 +133,7 @@ pub fn SelectOption<T: Clone + PartialEq + 'static>(props: SelectOptionProps<T>)
             index: props.index,
             aria_label: props.aria_label,
             aria_roledescription: props.aria_roledescription,
-            attributes: props.attributes,
+            attributes: merged,
             {props.children}
         }
     }
@@ -105,10 +143,11 @@ pub fn SelectOption<T: Clone + PartialEq + 'static>(props: SelectOptionProps<T>)
 pub fn SelectItemIndicator() -> Element {
     rsx! {
         select::SelectItemIndicator {
-            svg {
-                class: "select-check-icon",
-                view_box: "0 0 24 24",
-                xmlns: "http://www.w3.org/2000/svg",
+            icon::Icon {
+                class: "dx-select-check-icon",
+                width: "1rem",
+                height: "1rem",
+                stroke: "var(--secondary-color-5)",
                 path { d: "M5 13l4 4L19 7" }
             }
         }

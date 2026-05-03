@@ -2157,7 +2157,7 @@ fn ActiveSettingSection(
             div { "Sensor" }
             div {
                 Select::<Option<String>> {
-                    value: Some(setting_clone().sensor),
+                    default_value: setting_clone().sensor,
                     on_value_change: move |e: Option<Option<String>>| {
                         setting_clone.write().sensor = e.unwrap_or_default()
                     },
@@ -2599,7 +2599,7 @@ pub fn TestRule1() -> Element {
 
     rsx! {
         Select::<String> {
-            value: selected_project_key(),
+            default_value: selected_project_key(),
             on_value_change: move |v: Option<String>| selected_project_key.set(v),
             SelectTrigger { SelectValue {} }
 
