@@ -1,13 +1,17 @@
 use std::{collections::HashMap, time::Duration};
 
+use crate::persistence::{use_count_persistent, use_endpoints_persistent};
+use crate::{
+    components::toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator},
+    models::{EdgeEndpoint, Endpoint, EndpointTrait, Endpoints, GeneralEndpoint},
+    views::global::HeaderContext,
+};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::{
     label::Label,
     toast::{use_toast, ToastOptions},
 };
-use crate::{components::toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator}, models::{EdgeEndpoint, Endpoint, EndpointTrait, Endpoints, GeneralEndpoint}, views::global::HeaderContext};
-use crate::persistence::{use_count_persistent, use_endpoints_persistent};
 
 use crate::components::{
     button::{Button, ButtonVariant},
@@ -17,7 +21,8 @@ use crate::components::{
     radio_group::{RadioGroup, RadioItem},
 };
 
-
+#[css_module("/src/components/dialog/style.css")]
+struct Styles;
 
 #[derive(Store, Default)]
 struct NewEndpointInfo {
@@ -110,7 +115,7 @@ pub fn EndpointView() -> Element {
             on_open_change: move |v| new_info.is_open().set(v),
             DialogContent {
                 button {
-                    class: "dialog-close",
+                    class: Styles::dx_dialog_close,
                     r#type: "button",
                     aria_label: "Close",
                     tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
@@ -144,7 +149,6 @@ pub fn EndpointView() -> Element {
 
                         Button { r#type: "submit", onclick: on_new_submit, "Submit" }
                     }
-                
                 }
             }
         }
@@ -177,7 +181,6 @@ pub fn EndpointView() -> Element {
                                 "Yes"
                             }
                         }
-                    
                     }
                 }
             }
@@ -193,7 +196,6 @@ pub fn EndpointView() -> Element {
                         endpoint: endpoint.clone(),
                         delete_info,
                     }
-                
                 }
             }
         } else {
@@ -317,7 +319,6 @@ pub fn Storage2() -> Element {
         }
     }
 }
-
 
 #[component]
 fn ToggleToolbarButton(

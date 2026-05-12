@@ -22,6 +22,9 @@ use crate::{
     models::Endpoints,
 };
 
+#[css_module("/src/components/dialog/style.css")]
+struct Styles;
+
 #[derive(Store)]
 pub struct AddProjectCtx {
     pub is_open: bool,
@@ -117,7 +120,7 @@ pub fn ProjectsView() -> Element {
             on_open_change: move |v| new_info.is_open().set(v),
             DialogContent {
                 button {
-                    class: "dialog-close",
+                    class: Styles::dx_dialog_close,
                     r#type: "button",
                     aria_label: "Close",
                     tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
