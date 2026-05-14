@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::persistence::{use_endpoints_persistent, use_project_persistence};
+use crate::persistence::{use_auth_infos_persistent, use_endpoints_persistent, use_project_persistence};
 
 #[derive(Clone, Copy)]
 pub struct HeaderContext {
@@ -23,6 +23,8 @@ pub fn Providers(children: Element) -> Element {
     use_context_provider(|| endpoints);
     let projects = use_project_persistence();
     use_context_provider(|| projects);
+    let auth_infos = use_auth_infos_persistent();
+    use_context_provider(|| auth_infos);
 
     let title = use_signal(|| "Title".to_string());
     use_context_provider(|| HeaderContext { title });

@@ -34,3 +34,6 @@ pub use monitors::{ActiveMonitorView, MonitorProjectSelectPage, MonitorProjectPa
 
 mod draw_roi;
 pub use draw_roi::DrawRoiPage;
+
+mod import;
+pub use import::{AuthInfosPage, ProjectImportPage};

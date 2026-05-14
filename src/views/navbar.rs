@@ -114,6 +114,11 @@ pub fn Navbar() -> Element {
                                     icon: fa_solid_icons::FaLink,
                                     "Endpoints"
                                 }
+                                SidebarLink {
+                                    to: Route::AuthInfosPage {},
+                                    icon: fa_solid_icons::FaKey,
+                                    "Auth Infos"
+                                }
                             }
                         }
                     }

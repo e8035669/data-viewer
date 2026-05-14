@@ -1,5 +1,7 @@
+use anyhow::{anyhow, Result};
 use core::fmt;
 use dioxus::prelude::*;
+use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum::{Display, EnumIter};
@@ -12,6 +14,7 @@ pub struct Project {
 
 pub type Endpoints = HashMap<String, Endpoint>;
 pub type Projects = HashMap<String, Project>;
+pub type AuthInfos = HashMap<String, AuthInfo>;
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default, EnumIter, Display)]
 #[serde(rename_all = "lowercase")]
@@ -654,4 +657,225 @@ pub struct FormulaAction {
     pub ck: String,
     pub material_type: DeviceEventType,
     pub values: Vec<String>,
+}
+
+// Project API request
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+pub struct GeneralAuthInfo {
+    pub endpoint: String,
+    pub x_api_key: String,
+}
+
+impl GeneralAuthInfo {
+    fn new(endpoint: &str, x_api_key: &str) -> Self {
+        Self {
+            endpoint: endpoint.to_string(),
+            x_api_key: x_api_key.to_string(),
+        }
+    }
+
+    pub async fn get_partial_projects(
+        client: &Client,
+        base_url: &str,
+        api_key: &str,
+    ) -> Result<Vec<PartialProjectResp>> {
+        let url = format!("{base_url}/project");
+        let resp = client.get(&url).header("X-API-KEY", api_key).send().await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("General get_projects failed ({status}): {body}"));
+        }
+
+        Ok(resp.json::<Vec<PartialProjectResp>>().await?)
+    }
+
+    pub async fn get_project_detail(
+        client: &Client,
+        base_url: &str,
+        api_key: &str,
+        project_id: &str,
+    ) -> Result<ProjectResp> {
+        let url = format!("{base_url}/project/{project_id}");
+        let resp = client.get(&url).header("X-API-KEY", api_key).send().await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "General get_project({project_id}) failed ({status}): {body}"
+            ));
+        }
+
+        Ok(resp.json::<ProjectResp>().await?)
+    }
+
+    pub async fn get_projects(&self) -> Result<Vec<ProjectResp>> {
+        let client = Client::new();
+        let partial_projects =
+            GeneralAuthInfo::get_partial_projects(&client, &self.endpoint, &self.x_api_key).await?;
+        let futs: Vec<_> = partial_projects
+            .iter()
+            .map(|p| {
+                GeneralAuthInfo::get_project_detail(&client, &self.endpoint, &self.x_api_key, &p.id)
+            })
+            .collect();
+
+        let results = futures_util::future::join_all(futs).await;
+        Ok(results.into_iter().filter_map(|r| r.ok()).collect())
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+
+pub struct EdgeAuthInfo {
+    pub url: String,
+    pub digest: String,
+}
+
+impl EdgeAuthInfo {
+    fn new(url: &str, digest: &str) -> Self {
+        Self {
+            url: url.to_string(),
+            digest: digest.to_string(),
+        }
+    }
+
+    pub async fn edge_get_auth(
+        client: &Client,
+        base_url: &str,
+        username: &str,
+        digest: &str,
+    ) -> Result<AuthResponse> {
+        let url = format!("{base_url}/iot/v1/auth");
+        let resp = client
+            .get(&url)
+            .query(&[("username", username), ("ttl", "600")])
+            .header("digest", digest)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("Edge auth failed ({status}): {body}"));
+        }
+
+        Ok(resp.json::<AuthResponse>().await?)
+    }
+
+    pub async fn edge_get_project(
+        client: &Client,
+        base_url: &str,
+        token: &str,
+    ) -> Result<EdgeProjectResp> {
+        let url = format!("{base_url}/iot/v1/project");
+        let resp = client.get(&url).bearer_auth(token).send().await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("Edge get_project failed ({status}): {body}"));
+        }
+
+        Ok(resp.json::<EdgeProjectResp>().await?)
+    }
+
+    pub async fn get_projects(&self) -> Result<Vec<ProjectResp>> {
+        let url = Url::parse(&self.url)?;
+        let base_url = format!(
+            "{}://{}",
+            url.scheme(),
+            url.host_str().ok_or_else(|| anyhow!("missing host"))?
+        );
+        let username = url
+            .query_pairs()
+            .find(|(k, _)| k == "username")
+            .map(|(_, v)| v.to_string())
+            .ok_or_else(|| anyhow!("missing username in query"))?;
+
+        let client = Client::new();
+        let auth =
+            EdgeAuthInfo::edge_get_auth(&client, &base_url, &username, &self.digest).await?;
+        let edge_resp =
+            EdgeAuthInfo::edge_get_project(&client, &base_url, &auth.result.access_token).await?;
+
+        Ok(edge_resp.result)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+pub enum AuthInfo {
+    General(GeneralAuthInfo),
+    Edge(EdgeAuthInfo),
+}
+
+impl AuthInfo {
+    pub async fn get_projects(&self) -> Result<Vec<ProjectResp>> {
+        match self {
+            AuthInfo::General(info) => info.get_projects().await,
+            AuthInfo::Edge(info) => info.get_projects().await,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+pub struct DigestInfo {
+    pub digest: String,
+}
+
+// Project API response
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthResponse {
+    pub result: AuthorityInfo,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorityInfo {
+    pub access_token: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Permission {
+    #[default]
+    Admin,
+    ReadOnly,
+    ReadWrite,
+    WriteRawdataOnly,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectKey {
+    pub key: String,
+    pub permission: Permission,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialProjectResp {
+    pub id: String,
+    pub name: String,
+    pub desc: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectResp {
+    pub id: String,
+    pub name: String,
+    pub desc: String,
+    pub project_keys: Vec<ProjectKey>,
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeProjectResp {
+    pub result: Vec<ProjectResp>,
 }
