@@ -1,5 +1,6 @@
 use crate::{Route, views::global::HeaderContext};
 use dioxus::prelude::*;
+use dioxus_free_icons::{icons::fa_solid_icons::FaArrowRight, Icon};
 
 /// The Home page component that will be rendered when the current route is `[Route::Home]`.
 ///
@@ -23,14 +24,24 @@ pub fn Home() -> Element {
                 p { "If you're visiting for the first time, please follow these steps:" }
                 ol { class: "list-decimal list-inside space-y-2 pl-4",
                     li {
-                        "First, go to the "
-                        Link { to: Route::EndpointView {}, "Endpoints" }
-                        " page and add a new endpoint."
+                        "First, use the "
+                        Link {
+                            to: Route::EndpointView {},
+                            class: "inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium underline underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300 transition-colors",
+                            "Endpoints"
+                            Icon { icon: FaArrowRight, width: 12, height: 12 }
+                        }
+                        " page to add a new endpoint."
                     }
                     li {
-                        "Then visit the "
-                        Link { to: Route::ProjectsView {}, "Add Project" }
-                        " page to create your first project."
+                        "Visit the "
+                        Link {
+                            to: Route::ProjectsView {},
+                            class: "inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium underline underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300 transition-colors",
+                            "Projects"
+                            Icon { icon: FaArrowRight, width: 12, height: 12 }
+                        }
+                        " page to create or import your first project."
                     }
                 }
             }
@@ -41,14 +52,21 @@ pub fn Home() -> Element {
                     "✓ Completed Features"
                 }
                 ul { class: "list-disc list-inside space-y-2 pl-4 text-green-800 dark:text-green-200",
-                    li {
-                        "Manually input Project Key to view project content, including all devices and latest sensor data"
-                    }
+                    li { "Project management: add/delete projects, import projects from Auth Info" }
+                    li { "View project content including all devices and latest sensor data" }
                     li {
                         "Configure Device and Sensor settings: device information, additional attributes, and active monitoring settings"
                     }
                     li {
                         "View sensor historical data, supporting numerical and image sensor types with historical image search"
+                    }
+                    li {
+                        "Active monitoring overview: per-project device monitoring status with auto-refresh"
+                    }
+                    li { "Rule configuration for monitoring alerts and notifications" }
+                    li { "ROI drawing tool: draw, edit, and manage Regions of Interest on images" }
+                    li {
+                        "Auth Info management: configure General and Edge authentication credentials for project import"
                     }
                 }
             }
@@ -59,9 +77,9 @@ pub fn Home() -> Element {
                     "⏳ Upcoming Features"
                 }
                 ul { class: "list-disc list-inside space-y-2 pl-4 text-amber-800 dark:text-amber-200",
-                    li { "Overview of active monitoring status" }
-                    li { "Add and delete Device and Sensor" }
                     li { "WebSocket connection for real-time sensor data updates" }
+                    li { "Dashboard with data visualization and charts" }
+                    li { "Batch device and sensor operations" }
                 }
             }
 
@@ -69,7 +87,7 @@ pub fn Home() -> Element {
             div { class: "bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-2",
                 h3 { class: "font-semibold text-blue-900 dark:text-blue-100", "🔒 Data Security" }
                 p { class: "text-sm text-blue-800 dark:text-blue-200",
-                    "All settings and data in Endpoints and Add Project are stored locally in your browser. Your data is secure and private."
+                    "All settings including endpoints, projects, and auth info are stored locally in your browser. Your data is secure and private."
                 }
             }
 

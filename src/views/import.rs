@@ -158,7 +158,7 @@ pub fn AuthInfosPage() -> Element {
                             Label { html_for: "general_url", "Endpoint URL" }
                             Input {
                                 id: "general_url",
-                                placeholder: "https://example.com/api",
+                                placeholder: "https://example.com/api/v1",
                                 oninput: move |e: FormEvent| new_state.endpoint_url().set(e.value()),
                             }
                             Label { html_for: "general_key", "X-API-Key" }
@@ -170,7 +170,7 @@ pub fn AuthInfosPage() -> Element {
                             Label { html_for: "edge_url", "Auth URL" }
                             Input {
                                 id: "edge_url",
-                                placeholder: "https://iot.example.net/edge/v1/auth?username=...",
+                                placeholder: "https://example.com/edge/v1/auth?username=...",
                                 oninput: move |e: FormEvent| new_state.edge_url().set(e.value()),
                             }
                             Label { html_for: "edge_digest", "Digest" }
@@ -233,6 +233,13 @@ pub fn AuthInfosPage() -> Element {
     };
 
     rsx! {
+        div { class: "mb-4 p-4 rounded-md border bg-muted/50 text-sm text-muted-foreground",
+            p { class: "font-medium text-foreground mb-1", "Import Projects from API" }
+            p { "Save your API credentials here, then click an entry to fetch its project list and import projects into the app." }
+            p { class: "mt-2 text-yellow-600 dark:text-yellow-400",
+                "⚠ Web version may fail due to CORS restrictions. Use the Linux desktop version for reliable operation."
+            }
+        }
         Button { class: "mb-4", onclick: move |_| new_state.open_dialog(), "New" }
         {new_dialog}
         {delete_dialog}
@@ -259,7 +266,9 @@ fn AuthInfoCard(
             CardHeader {
                 CardTitle {
                     Link {
-                        to: Route::ProjectImportPage { auth_info_name: name_for_nav.clone() },
+                        to: Route::ProjectImportPage {
+                            auth_info_name: name_for_nav.clone(),
+                        },
                         {name.as_str()}
                     }
                 }
@@ -491,8 +500,7 @@ fn ProjectFetchedCard(project: ProjectResp, import_state: Store<ImportDialogStat
                     }
                 }
                 CardAction {
-                    Button {
-                        onclick: move |_| import_state.open_for_project(&project_clone),
+                    Button { onclick: move |_| import_state.open_for_project(&project_clone),
                         "Import"
                     }
                 }

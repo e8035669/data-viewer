@@ -134,7 +134,7 @@ pub fn EndpointView() -> Element {
                         Label { html_for: "endpoint_url", "Endpoint URL" }
                         Input {
                             id: "endpoint_url",
-                            placeholder: "https://example.com/api",
+                            placeholder: "https://example.com/api/v1",
                             oninput: move |e: FormEvent| new_info.endpoint_url().set(e.value()),
                         }
 

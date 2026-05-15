@@ -177,7 +177,6 @@ pub fn Navbar() -> Element {
                     }
                 }
             }
-        
         }
 
         // The `Outlet` component is used to render the next component inside the layout. In this case, it will render either
