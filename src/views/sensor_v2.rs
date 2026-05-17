@@ -421,10 +421,8 @@ pub fn DeviceCard(
                     }
                 }
             }
-            CardContent {
-                p { {device().id} }
-            }
             CardFooter {
+                p { {device().id} }
                 Link {
                     to: Route::DeviceSensors {
                         project_name: project_name(),

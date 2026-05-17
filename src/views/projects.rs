@@ -11,7 +11,7 @@ use dioxus_primitives::toast::{use_toast, ToastOptions};
 use crate::{
     components::{
         button::{Button, ButtonVariant},
-        card::{Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle},
+        card::{Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle},
         dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle},
         input::Input,
         label::Label,
@@ -424,11 +424,11 @@ fn ProjectCard2(name: String, project: Project, delete_ctx: Store<DeleteCtx>) ->
                     }
                 }
             }
-            CardContent {
-                p { "Project key: {project.project_key}" }
-                p { "Endpoint: {project.endpoint_key}" }
-            }
             CardFooter {
+                div { class: "text-sm flex flex-col gap-0.5",
+                    p { "PK: {project.project_key}" }
+                    p { "Endpoint: {project.endpoint_key}" }
+                }
                 Link {
                     to: Route::ProjectDevices {
                         project_name: name_clone2,
