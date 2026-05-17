@@ -403,6 +403,7 @@ pub fn ProjectsView2() -> Element {
         {new_dialog}
         {delete_dialog}
         div { class: "grid grid-cols-1 gap-4", {cards} }
+        div { class: "h-48" }
     }
 }
 
@@ -410,30 +411,31 @@ pub fn ProjectsView2() -> Element {
 fn ProjectCard2(name: String, project: Project, delete_ctx: Store<DeleteCtx>) -> Element {
     let name_clone = name.clone();
     let name_clone2 = name.clone();
-    let prompt_delete = move |_| {
+    let prompt_delete = move |e: MouseEvent| {
+        e.prevent_default();
         delete_ctx.prompt_delete(&name_clone);
     };
     rsx! {
-        Card {
-            CardHeader {
-                CardTitle {
-                    Link {
-                        to: Route::ProjectDevices {
-                            project_name: name_clone2,
-                        },
-                        {name}
+        Link {
+            to: Route::ProjectDevices {
+                project_name: name_clone2,
+            },
+            Card {
+                CardHeader {
+                    CardTitle { {name} }
+                    CardAction {
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            onclick: prompt_delete,
+                            Icon { icon: fa_solid_icons::FaTrash }
+                        }
                     }
                 }
-                CardAction {
-                    Button { variant: ButtonVariant::Ghost, onclick: prompt_delete,
-                        Icon { icon: fa_solid_icons::FaTrash }
-                    }
-                }
-            }
 
-            CardContent {
-                p { "Project key: {project.project_key}" }
-                p { "Endpoint: {project.endpoint_key}" }
+                CardContent {
+                    p { "Project key: {project.project_key}" }
+                    p { "Endpoint: {project.endpoint_key}" }
+                }
             }
         }
     }

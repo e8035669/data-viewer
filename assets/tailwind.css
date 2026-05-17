@@ -268,14 +268,29 @@
   .top-2 {
     top: calc(var(--spacing) * 2);
   }
+  .\!right-0 {
+    right: calc(var(--spacing) * 0) !important;
+  }
   .right-0 {
     right: calc(var(--spacing) * 0);
+  }
+  .right-0\! {
+    right: calc(var(--spacing) * 0) !important;
   }
   .right-2 {
     right: calc(var(--spacing) * 2);
   }
+  .\!left-auto {
+    left: auto !important;
+  }
   .left-0 {
     left: calc(var(--spacing) * 0);
+  }
+  .left-auto {
+    left: auto;
+  }
+  .left-auto\! {
+    left: auto !important;
   }
   .z-10 {
     z-index: 10;
@@ -407,11 +422,23 @@
   .flex-1 {
     flex: 1;
   }
+  .flex-shrink {
+    flex-shrink: 1;
+  }
   .shrink-0 {
     flex-shrink: 0;
   }
   .border-collapse {
     border-collapse: collapse;
+  }
+  .\!origin-top-right {
+    transform-origin: top right !important;
+  }
+  .origin-top-right {
+    transform-origin: top right;
+  }
+  .origin-top-right\! {
+    transform-origin: top right !important;
   }
   .transform {
     transform: var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);

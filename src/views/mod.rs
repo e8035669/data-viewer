@@ -39,4 +39,6 @@ mod import;
 pub use import::{AuthInfosPage, ProjectImportPage};
 
 mod sensor_v2;
-pub use sensor_v2::{ProjectLayout, ProjectDevices};
+pub use sensor_v2::{
+    DeviceAttr, DeviceSensors, ProjectDevices, ProjectLayout, SensorAttr, SensorHistory,
+};

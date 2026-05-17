@@ -3,9 +3,10 @@
 use dioxus::prelude::*;
 
 use views::{
-    ActiveMonitorView, AuthInfosPage, Blog, DevicePage3, DrawRoiPage, EndpointView, Home,
-    MonitorProjectPage, MonitorProjectSelectPage, Navbar, ProjectDevices, ProjectImportPage,
-    ProjectLayout, ProjectsView, ProjectsView2, SensorPanel, Storage, Storage2, TestRule1,
+    ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DevicePage3, DeviceSensors, DrawRoiPage,
+    EndpointView, Home, MonitorProjectPage, MonitorProjectSelectPage, Navbar, ProjectDevices,
+    ProjectImportPage, ProjectLayout, ProjectsView, ProjectsView2, SensorAttr, SensorHistory,
+    SensorPanel, Storage, Storage2, TestRule1,
 };
 
 use crate::views::Providers;
@@ -87,6 +88,19 @@ enum Route {
         #[layout(ProjectLayout)]
             #[route("/")]
             ProjectDevices { project_name: String },
+
+            #[route("/devices/:device_id")]
+            DeviceSensors { project_name: String, device_id: String },
+
+            #[route("/devices/:device_id/attr")]
+            DeviceAttr { project_name: String, device_id: String },
+
+            #[nest("/devices/:device_id/sensors/:sensor_id")]
+                #[route("/attr")]
+                SensorAttr { project_name: String, device_id: String, sensor_id: String },
+
+                #[route("/history")]
+                SensorHistory { project_name: String, device_id: String, sensor_id: String },
 
 }
 
