@@ -374,13 +374,6 @@ pub fn DeviceCard(
     delete_ctx: Store<DeleteCtx>,
 ) -> Element {
     let desc = device().desc.unwrap_or_default();
-    let nav = navigator();
-    let view_sensor = move |_| {
-        nav.push(Route::DeviceSensors {
-            project_name: project_name(),
-            device_id: device().id,
-        });
-    };
     let nav2 = navigator();
     let view_device_attr = move |_| {
         nav2.push(Route::DeviceAttr {
@@ -392,48 +385,54 @@ pub fn DeviceCard(
         delete_ctx.prompt_delete(&device().id);
     };
     rsx! {
-        div { class: "cursor-pointer", onclick: view_sensor,
-            Card {
-                CardHeader {
-                    CardTitle { {device().name} }
-                    CardDescription { {desc} }
-                    CardAction {
-                        DropdownMenu {
-                            DropdownMenuTrigger {
-                                r#as: |attributes| rsx! {
-                                    Button {
-                                        attributes,
-                                        onclick: |e: Event<MouseData>| e.stop_propagation(),
-                                        variant: ButtonVariant::Ghost,
-                                        Icon { icon: fa_solid_icons::FaEllipsisVertical }
-                                    }
-                                },
-                            }
-                            DropdownMenuContent { class: "left-auto! right-0! origin-top-right!",
-                                DropdownMenuItem::<String> {
-                                    index: 0usize,
-                                    value: "Setting".to_string(),
-                                    on_select: view_device_attr,
-                                    div { class: "flex gap-2",
-                                        Icon { icon: fa_solid_icons::FaGear }
-                                        "Setting"
-                                    }
+        Card {
+            CardHeader {
+                CardTitle { {device().name} }
+                CardDescription { {desc} }
+                CardAction {
+                    DropdownMenu {
+                        DropdownMenuTrigger {
+                            r#as: |attributes| rsx! {
+                                Button { attributes, variant: ButtonVariant::Ghost,
+                                    Icon { icon: fa_solid_icons::FaEllipsisVertical }
                                 }
-                                DropdownMenuItem::<String> {
-                                    index: 1usize,
-                                    value: "Delete".to_string(),
-                                    on_select: on_delete,
-                                    div { class: "flex gap-2",
-                                        Icon { icon: fa_solid_icons::FaTrash }
-                                        "Delete"
-                                    }
+                            },
+                        }
+                        DropdownMenuContent { class: "left-auto! right-0! origin-top-right!",
+                            DropdownMenuItem::<String> {
+                                index: 0usize,
+                                value: "Setting".to_string(),
+                                on_select: view_device_attr,
+                                div { class: "flex gap-2",
+                                    Icon { icon: fa_solid_icons::FaGear }
+                                    "Setting"
+                                }
+                            }
+                            DropdownMenuItem::<String> {
+                                index: 1usize,
+                                value: "Delete".to_string(),
+                                on_select: on_delete,
+                                div { class: "flex gap-2",
+                                    Icon { icon: fa_solid_icons::FaTrash }
+                                    "Delete"
                                 }
                             }
                         }
                     }
                 }
-                CardContent {
-                    p { {device().id} }
+            }
+            CardContent {
+                p { {device().id} }
+            }
+            CardFooter {
+                Link {
+                    to: Route::DeviceSensors {
+                        project_name: project_name(),
+                        device_id: device().id,
+                    },
+                    class: "ml-auto flex items-center gap-2 text-sm",
+                    "Open"
+                    Icon { icon: fa_solid_icons::FaArrowRight }
                 }
             }
         }

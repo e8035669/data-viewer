@@ -11,7 +11,7 @@ use dioxus_primitives::toast::{use_toast, ToastOptions};
 use crate::{
     components::{
         button::{Button, ButtonVariant},
-        card::{Card, CardAction, CardContent, CardHeader, CardTitle},
+        card::{Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle},
         dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle},
         input::Input,
         label::Label,
@@ -411,30 +411,31 @@ pub fn ProjectsView2() -> Element {
 fn ProjectCard2(name: String, project: Project, delete_ctx: Store<DeleteCtx>) -> Element {
     let name_clone = name.clone();
     let name_clone2 = name.clone();
-    let prompt_delete = move |e: MouseEvent| {
-        e.prevent_default();
+    let prompt_delete = move |_| {
         delete_ctx.prompt_delete(&name_clone);
     };
     rsx! {
-        Link {
-            to: Route::ProjectDevices {
-                project_name: name_clone2,
-            },
-            Card {
-                CardHeader {
-                    CardTitle { {name} }
-                    CardAction {
-                        Button {
-                            variant: ButtonVariant::Ghost,
-                            onclick: prompt_delete,
-                            Icon { icon: fa_solid_icons::FaTrash }
-                        }
+        Card {
+            CardHeader {
+                CardTitle { {name} }
+                CardAction {
+                    Button { variant: ButtonVariant::Ghost, onclick: prompt_delete,
+                        Icon { icon: fa_solid_icons::FaTrash }
                     }
                 }
-
-                CardContent {
-                    p { "Project key: {project.project_key}" }
-                    p { "Endpoint: {project.endpoint_key}" }
+            }
+            CardContent {
+                p { "Project key: {project.project_key}" }
+                p { "Endpoint: {project.endpoint_key}" }
+            }
+            CardFooter {
+                Link {
+                    to: Route::ProjectDevices {
+                        project_name: name_clone2,
+                    },
+                    class: "ml-auto flex items-center gap-2 text-sm",
+                    "Open"
+                    Icon { icon: fa_solid_icons::FaArrowRight }
                 }
             }
         }
