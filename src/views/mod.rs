@@ -24,7 +24,7 @@ mod endpoints;
 pub use endpoints::{EndpointView, Storage, Storage2};
 
 mod projects;
-pub use projects::ProjectsView;
+pub use projects::{ProjectsView, ProjectsView2};
 
 mod global;
 pub use global::Providers;
@@ -37,3 +37,6 @@ pub use draw_roi::DrawRoiPage;
 
 mod import;
 pub use import::{AuthInfosPage, ProjectImportPage};
+
+mod sensor_v2;
+pub use sensor_v2::{ProjectLayout, ProjectDevices};

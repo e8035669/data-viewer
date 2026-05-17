@@ -153,6 +153,12 @@ pub fn Navbar() -> Element {
                                     icon: fa_solid_icons::FaLink,
                                     "TestRule1"
                                 }
+
+                                SidebarLink {
+                                    to: Route::ProjectsView2 {},
+                                    icon: fa_solid_icons::FaCirclePlus,
+                                    "Project V2"
+                                }
                             }
                         }
                     }
