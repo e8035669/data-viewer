@@ -393,7 +393,7 @@ pub fn DeviceCard(
                     DropdownMenu {
                         DropdownMenuTrigger {
                             r#as: |attributes| rsx! {
-                                Button { attributes, variant: ButtonVariant::Ghost,
+                                Button { attributes, variant: ButtonVariant::Ghost, class: "shadow-none!",
                                     Icon { icon: fa_solid_icons::FaEllipsisVertical }
                                 }
                             },
@@ -428,7 +428,8 @@ pub fn DeviceCard(
                         project_name: project_name(),
                         device_id: device().id,
                     },
-                    class: "ml-auto flex items-center gap-2 text-sm",
+                    class: "ml-auto button flex items-center gap-2",
+                    "data-style": "ghost",
                     "Open"
                     Icon { icon: fa_solid_icons::FaArrowRight }
                 }

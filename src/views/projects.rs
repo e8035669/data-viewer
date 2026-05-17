@@ -433,7 +433,8 @@ fn ProjectCard2(name: String, project: Project, delete_ctx: Store<DeleteCtx>) ->
                     to: Route::ProjectDevices {
                         project_name: name_clone2,
                     },
-                    class: "ml-auto flex items-center gap-2 text-sm",
+                    class: "ml-auto button flex items-center gap-2",
+                    "data-style": "ghost",
                     "Open"
                     Icon { icon: fa_solid_icons::FaArrowRight }
                 }
