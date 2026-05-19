@@ -18,6 +18,7 @@ use crate::{
         switch::{Switch, SwitchThumb},
         textarea::Textarea,
     },
+    ui::{breadcrumb::{Breadcrumb, BreadcrumbItem}, page_header::PageHeader},
     models::{
         ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute, Device, EditDevice,
         EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project, Projects, RawData,
@@ -341,8 +342,10 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
     };
 
     rsx! {
-        h1 { class: "text-2xl mb-4", "Devices" }
-        div { class: "flex justify-end gap-4 mb-4",
+        Breadcrumb {
+            items: vec![BreadcrumbItem::link("Projects", Route::ProjectsView2 {})],
+        }
+        PageHeader { title: "Devices",
             Button {
                 onclick: move |_| {
                     new_device.set(EditDevice::new());
@@ -721,10 +724,13 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
     };
 
     rsx! {
-        DeviceHeaderCard { project_name, device: device_signal }
-        {new_sensor_dialog}
-        {delete_dialog}
-        div { class: "flex w-full justify-end my-4 gap-4",
+        Breadcrumb {
+            items: vec![
+                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
+                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+            ],
+        }
+        PageHeader { title: device_signal().name,
             Button {
                 variant: ButtonVariant::Ghost,
                 onclick: move |_| {
@@ -741,6 +747,8 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
                 "Add Sensor"
             }
         }
+        {new_sensor_dialog}
+        {delete_dialog}
         div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
             if let Some(response) = &*resource.read() {
                 match response {
@@ -1039,7 +1047,13 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
     };
 
     rsx! {
-        DeviceHeaderCard { project_name, device: device_signal }
+        Breadcrumb {
+            items: vec![
+                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
+                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+            ],
+        }
+        PageHeader { title: device_signal().name }
 
         div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
             h1 { class: "text-2xl font-bold", "Device Info" }
@@ -1785,7 +1799,17 @@ pub fn SensorAttr(
     };
 
     rsx! {
-        SensorHeaderCard { project_name, device_id, sensor: sensor_signal }
+        Breadcrumb {
+            items: vec![
+                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
+                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+                BreadcrumbItem::link(
+                    device().map(|d| d.name).unwrap_or_default(),
+                    Route::DeviceSensors { project_name: project_name(), device_id: device_id() },
+                ),
+            ],
+        }
+        PageHeader { title: sensor_signal().name }
 
         Card {
             CardHeader {
@@ -2019,7 +2043,17 @@ pub fn SensorHistory(
     };
 
     rsx! {
-        SensorHeaderCard { project_name, device_id, sensor: sensor_signal }
+        Breadcrumb {
+            items: vec![
+                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
+                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+                BreadcrumbItem::link(
+                    device().map(|d| d.name).unwrap_or_default(),
+                    Route::DeviceSensors { project_name: project_name(), device_id: device_id() },
+                ),
+            ],
+        }
+        PageHeader { title: sensor_signal().name }
 
         h2 { class: "text-xl font-bold mb-4", "Raw Data Records" }
 

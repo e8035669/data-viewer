@@ -15,6 +15,8 @@ use crate::views::Providers;
 mod components;
 /// Centralized models (API types) module.
 mod models;
+/// Custom UI layout components.
+mod ui;
 /// Centralized persistence helpers.
 mod persistence;
 /// Define a views module that contains the UI for all Layouts and Routes for our app.

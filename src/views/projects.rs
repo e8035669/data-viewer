@@ -21,6 +21,7 @@ use crate::{
         },
     },
     models::Endpoints,
+    ui::page_header::PageHeader,
 };
 
 #[css_module("/src/components/dialog/style.css")]
@@ -397,8 +398,7 @@ pub fn ProjectsView2() -> Element {
     };
 
     rsx! {
-        h1 { class: "text-2xl mb-4", "Projects" }
-        div { class: "flex justify-end gap-4 mb-4",
+        PageHeader { title: "Projects",
             Button { onclick: on_new_click, "Add" }
         }
         {new_dialog}
