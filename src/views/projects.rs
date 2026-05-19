@@ -249,12 +249,10 @@ pub fn ProjectCard(name: String, project: Project, delete_ctx: Store<DeleteCtx>)
 #[component]
 pub fn ProjectsView2() -> Element {
     use_effect(|| {
-        consume_context::<HeaderContext>().set_title("Projects V2");
+        consume_context::<HeaderContext>().set_title("Projects");
     });
     let mut projects = use_context::<Signal<Projects>>();
-    // let mut projects = use_project_persistence();
     let endpoints = use_context::<Signal<Endpoints>>();
-    // let endpoints = use_endpoints_persistent();
 
     let mut new_info = use_store(|| AddProjectCtx {
         is_open: false,
@@ -399,7 +397,10 @@ pub fn ProjectsView2() -> Element {
     };
 
     rsx! {
-        Button { class: "mb-4", onclick: on_new_click, "Add" }
+        h1 { class: "text-2xl mb-4", "Projects" }
+        div { class: "flex justify-end gap-4 mb-4",
+            Button { onclick: on_new_click, "Add" }
+        }
         {new_dialog}
         {delete_dialog}
         div { class: "grid grid-cols-1 gap-4", {cards} }

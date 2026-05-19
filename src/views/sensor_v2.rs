@@ -726,6 +726,7 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
         {delete_dialog}
         div { class: "flex w-full justify-end my-4 gap-4",
             Button {
+                variant: ButtonVariant::Ghost,
                 onclick: move |_| {
                     resource.restart();
                     timer.set(10);
