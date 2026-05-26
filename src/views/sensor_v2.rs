@@ -18,11 +18,14 @@ use crate::{
         switch::{Switch, SwitchThumb},
         textarea::Textarea,
     },
-    ui::{breadcrumb::{Breadcrumb, BreadcrumbItem}, page_header::PageHeader},
     models::{
         ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute, Device, EditDevice,
         EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project, Projects, RawData,
         Sensor, SensorStoreExt, SensorType, SensorWithData,
+    },
+    ui::{
+        breadcrumb::{Breadcrumb, BreadcrumbItem},
+        page_header::PageHeader,
     },
     views::global::HeaderContext,
     Route,
@@ -342,9 +345,7 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
     };
 
     rsx! {
-        Breadcrumb {
-            items: vec![BreadcrumbItem::link("Projects", Route::ProjectsView2 {})],
-        }
+        Breadcrumb { items: vec![BreadcrumbItem::link("Projects", Route::ProjectsView {})] }
         PageHeader { title: "Devices",
             Button {
                 onclick: move |_| {
@@ -726,8 +727,13 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
     rsx! {
         Breadcrumb {
             items: vec![
-                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
-                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+                BreadcrumbItem::link("Projects", Route::ProjectsView {}),
+                BreadcrumbItem::link(
+                    project_name(),
+                    Route::ProjectDevices {
+                        project_name: project_name(),
+                    },
+                ),
             ],
         }
         PageHeader { title: device_signal().name,
@@ -861,7 +867,11 @@ fn SensorCard(
                 CardAction {
                     DropdownMenu {
                         DropdownMenuTrigger {
-                            Icon { icon: fa_solid_icons::FaEllipsisVertical }
+                            r#as: |attributes| rsx! {
+                                Button { attributes, variant: ButtonVariant::Ghost, class: "shadow-none!",
+                                    Icon { icon: fa_solid_icons::FaEllipsisVertical }
+                                }
+                            },
                         }
                         DropdownMenuContent { class: "left-auto! right-0! origin-top-right!",
                             DropdownMenuItem::<String> {
@@ -1049,8 +1059,13 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
     rsx! {
         Breadcrumb {
             items: vec![
-                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
-                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+                BreadcrumbItem::link("Projects", Route::ProjectsView {}),
+                BreadcrumbItem::link(
+                    project_name(),
+                    Route::ProjectDevices {
+                        project_name: project_name(),
+                    },
+                ),
             ],
         }
         PageHeader { title: device_signal().name }
@@ -1801,11 +1816,19 @@ pub fn SensorAttr(
     rsx! {
         Breadcrumb {
             items: vec![
-                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
-                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+                BreadcrumbItem::link("Projects", Route::ProjectsView {}),
+                BreadcrumbItem::link(
+                    project_name(),
+                    Route::ProjectDevices {
+                        project_name: project_name(),
+                    },
+                ),
                 BreadcrumbItem::link(
                     device().map(|d| d.name).unwrap_or_default(),
-                    Route::DeviceSensors { project_name: project_name(), device_id: device_id() },
+                    Route::DeviceSensors {
+                        project_name: project_name(),
+                        device_id: device_id(),
+                    },
                 ),
             ],
         }
@@ -2045,11 +2068,19 @@ pub fn SensorHistory(
     rsx! {
         Breadcrumb {
             items: vec![
-                BreadcrumbItem::link("Projects", Route::ProjectsView2 {}),
-                BreadcrumbItem::link(project_name(), Route::ProjectDevices { project_name: project_name() }),
+                BreadcrumbItem::link("Projects", Route::ProjectsView {}),
+                BreadcrumbItem::link(
+                    project_name(),
+                    Route::ProjectDevices {
+                        project_name: project_name(),
+                    },
+                ),
                 BreadcrumbItem::link(
                     device().map(|d| d.name).unwrap_or_default(),
-                    Route::DeviceSensors { project_name: project_name(), device_id: device_id() },
+                    Route::DeviceSensors {
+                        project_name: project_name(),
+                        device_id: device_id(),
+                    },
                 ),
             ],
         }

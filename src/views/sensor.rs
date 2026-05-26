@@ -222,7 +222,7 @@ impl<Lens> Store<PageContext, Lens> {
 }
 
 #[component]
-pub fn DevicePage3(project_name: ReadSignal<String>) -> Element {
+pub fn DevicePage3Old(project_name: ReadSignal<String>) -> Element {
     use_effect(move || {
         let title = project_name();
         consume_context::<HeaderContext>().set_title(title.as_str());

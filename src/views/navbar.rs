@@ -155,9 +155,9 @@ pub fn Navbar() -> Element {
                                 }
 
                                 SidebarLink {
-                                    to: Route::ProjectsView2 {},
+                                    to: Route::ProjectsViewOld {},
                                     icon: fa_solid_icons::FaCirclePlus,
-                                    "Project V2"
+                                    "Projects (Old)"
                                 }
                             }
                         }
@@ -216,7 +216,7 @@ pub fn NavProjects(keys: ReadSignal<Vec<String>>) -> Element {
     rsx! {
         for k in keys.iter() {
             SidebarLink {
-                to: Route::DevicePage3 {
+                to: Route::ProjectDevices {
                     project_name: k.to_string(),
                 },
                 icon: fa_solid_icons::FaFolderOpen,

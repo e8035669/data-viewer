@@ -3,9 +3,9 @@
 use dioxus::prelude::*;
 
 use views::{
-    ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DevicePage3, DeviceSensors, DrawRoiPage,
+    ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DevicePage3Old, DeviceSensors, DrawRoiPage,
     EndpointView, Home, MonitorProjectPage, MonitorProjectSelectPage, Navbar, ProjectDevices,
-    ProjectImportPage, ProjectLayout, ProjectsView, ProjectsView2, SensorAttr, SensorHistory,
+    ProjectImportPage, ProjectLayout, ProjectsView, ProjectsViewOld, SensorAttr, SensorHistory,
     SensorPanel, Storage, Storage2, TestRule1,
 };
 
@@ -15,10 +15,10 @@ use crate::views::Providers;
 mod components;
 /// Centralized models (API types) module.
 mod models;
-/// Custom UI layout components.
-mod ui;
 /// Centralized persistence helpers.
 mod persistence;
+/// Custom UI layout components.
+mod ui;
 /// Define a views module that contains the UI for all Layouts and Routes for our app.
 mod views;
 
@@ -56,11 +56,11 @@ enum Route {
         #[route("/storage2")]
         Storage2 {},
 
-        #[route("/projects")]
-        ProjectsView {},
+        #[route("/projects_old")]
+        ProjectsViewOld {},
 
-        #[route("/projects/:project_name")]
-        DevicePage3 {project_name: String},
+        #[route("/projects_old/:project_name")]
+        DevicePage3Old {project_name: String},
 
         #[route("/monitorall")]
         ActiveMonitorView {},
@@ -83,10 +83,10 @@ enum Route {
         #[route("/import/:auth_info_name")]
         ProjectImportPage { auth_info_name: String },
 
-        #[route("/projects_v2")]
-        ProjectsView2 {},
+        #[route("/projects")]
+        ProjectsView {},
 
-        #[nest("/projects_v2/:project_name")]
+        #[nest("/projects/:project_name")]
         #[layout(ProjectLayout)]
             #[route("/")]
             ProjectDevices { project_name: String },
