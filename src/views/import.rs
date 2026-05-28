@@ -12,6 +12,7 @@ use crate::{
         AuthInfo, AuthInfos, EdgeAuthInfo, Endpoints, GeneralAuthInfo, Project, ProjectResp,
         Projects,
     },
+    ui::page_header::PageHeader,
     views::global::HeaderContext,
     Route,
 };
@@ -235,12 +236,16 @@ pub fn AuthInfosPage() -> Element {
     rsx! {
         div { class: "mb-4 p-4 rounded-md border bg-muted/50 text-sm text-muted-foreground",
             p { class: "font-medium text-foreground mb-1", "Import Projects from API" }
-            p { "Save your API credentials here, then click an entry to fetch its project list and import projects into the app." }
+            p {
+                "Save your API credentials here, then click an entry to fetch its project list and import projects into the app."
+            }
             p { class: "mt-2 text-yellow-600 dark:text-yellow-400",
                 "⚠ Web version may fail due to CORS restrictions. Use the Linux desktop version for reliable operation."
             }
         }
-        Button { class: "mb-4", onclick: move |_| new_state.open_dialog(), "New" }
+        PageHeader { title: "Auth Infos",
+            Button { onclick: move |_| new_state.open_dialog(), "New" }
+        }
         {new_dialog}
         {delete_dialog}
         div { class: "grid grid-cols-1 gap-4", {cards} }
@@ -248,11 +253,7 @@ pub fn AuthInfosPage() -> Element {
 }
 
 #[component]
-fn AuthInfoCard(
-    name: String,
-    info: AuthInfo,
-    delete_state: Store<DeleteAuthInfoState>,
-) -> Element {
+fn AuthInfoCard(name: String, info: AuthInfo, delete_state: Store<DeleteAuthInfoState>) -> Element {
     let name_for_delete = name.clone();
     let name_for_nav = name.clone();
 
@@ -306,7 +307,8 @@ impl<Lens> Store<ImportDialogState, Lens> {
     fn open_for_project(&mut self, project: &ProjectResp) {
         let keys: Vec<String> = project.project_keys.iter().map(|k| k.key.clone()).collect();
         self.project_name().set(project.name.clone());
-        self.project_key().set(keys.first().cloned().unwrap_or_default());
+        self.project_key()
+            .set(keys.first().cloned().unwrap_or_default());
         self.endpoint_key().clear();
         self.available_keys().set(keys);
         self.is_open().set(true);

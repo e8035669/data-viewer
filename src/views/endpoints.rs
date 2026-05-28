@@ -1,6 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use crate::persistence::{use_count_persistent, use_endpoints_persistent};
+use crate::ui::page_header::PageHeader;
 use crate::{
     components::toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator},
     models::{EdgeEndpoint, Endpoint, EndpointTrait, Endpoints, GeneralEndpoint},
@@ -209,7 +210,9 @@ pub fn EndpointView() -> Element {
     };
 
     rsx! {
-        Button { class: "mb-4", onclick: on_new_click, "New" }
+        PageHeader { title: "Endpoints",
+            Button { onclick: on_new_click, "New" }
+        }
         {new_dialog}
         {delete_dialog}
         div { class: "grid grid-cols-1 gap-4", {cards} }
