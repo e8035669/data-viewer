@@ -106,7 +106,7 @@ pub fn Navbar() -> Element {
                     }
 
                     SidebarGroup {
-                        SidebarGroupLabel { "Setting" }
+                        SidebarGroupLabel { "Settings" }
                         SidebarGroupContent {
                             SidebarMenu {
                                 SidebarLink {
