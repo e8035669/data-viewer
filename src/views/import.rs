@@ -26,6 +26,9 @@ use dioxus_primitives::{
 #[css_module("/src/components/dialog/style.css")]
 struct Styles;
 
+#[css_module("src/components/card/style.css")]
+struct CardStyles;
+
 // ──────────────────────────────────────────────
 // AuthInfosPage: list / add / delete AuthInfo
 // ──────────────────────────────────────────────
@@ -267,8 +270,9 @@ fn AuthInfoCard(name: String, info: AuthInfo, delete_state: Store<DeleteAuthInfo
             CardHeader {
                 CardTitle { {name.as_str()} }
                 CardDescription {
+                    class: format!("{} {}", CardStyles::dx_card_description, "min-w-0"),
                     p { "Type: {kind}" }
-                    p { class: "truncate", "URL: {summary}" }
+                    p { "URL: {summary}" }
                 }
                 CardAction {
                     Button {
