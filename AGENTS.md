@@ -263,3 +263,37 @@ The initial UI rendered by the component on the client must be identical to the 
 
 * Use the `use_server_future` hook instead of `use_resource`. It runs the future on the server, serializes the result, and sends it to the client, ensuring the client has the data immediately for its first render.
 * Any code that relies on browser-specific APIs (like accessing `localStorage`) must be run *after* hydration. Place this code inside a `use_effect` hook.
+
+# UI/UX & Traditional Chinese (Taiwan) Localization Guidelines
+
+To maintain visual clarity, tools usability, and standard Taiwanese language alignment across the project, you MUST strictly follow these rules:
+
+## UI/UX & Aesthetic Rules (Minimalist & Developer-Native)
+
+*   **SaaS-Native Style**: Use flat, clean, layout-driven design patterns (similar to GitHub, Vercel). Focus on high contrast typography and clean borders rather than visual fluff.
+*   **No "AI-style" Visual Noise**: Never use flashy multi-color background gradients (e.g., violet-to-blue gradients) or useless blurry floating background shapes (e.g., `blur-3xl`).
+*   **No Unnecessary Transitions/Animations**: Avoid adding unnecessary transitioning/animation classes (such as `transition-all`, `duration-300`, `transition-transform`, `group-hover:translate-x-x`). Use instant, responsive hover effects instead.
+*   **No Decorative Shadows/Glows**: Refrain from adding shadows (`shadow-md`, `shadow-lg`) or glow rings (`ring-2 ring-blue-500/10`) unless highly necessary. Stick to flat borders (`border-slate-200 dark:border-zinc-800`).
+*   **100% Native Tailwind Classes**: Avoid using non-standard utility classes like `text-foreground`, `text-secondary-foreground`, `text-muted-foreground`, `bg-card`, or `border-border`. Always write clean native Tailwind classes (e.g., `text-slate-900 dark:text-slate-100`, `text-slate-500 dark:text-slate-400`, `bg-white dark:bg-zinc-900`, `border-slate-200 dark:border-zinc-800`).
+
+## Terminology & Localization Rules (Taiwan Traditional Chinese)
+
+All user-facing UI text, menus, buttons, and notifications must strictly adhere to **Standard Traditional Chinese (Taiwan Localization)**. NEVER use Simplified Chinese phrasing or mainland terminology:
+
+| Concept / English | Taiwan (Correct) | Mainland (Avoid) |
+| :--- | :--- | :--- |
+| Data | 資料 | 數據 |
+| Server | 伺服器 | 服務器 |
+| Device | 裝置 / 設備 | 設備 |
+| Sensor | 感測器 | 傳感器 |
+| Realtime | 即時 | 實時 |
+| Import | 匯入 | 導入 |
+| Local | 本機 | 本地 |
+| Storage / Store | 儲存 / 儲存 | 存儲 |
+| Configure | 設定 | 配置 |
+| Key / Credentials | 金鑰 / 憑證 | 密鑰 / 憑證 |
+| Active / Running | 運作中 / 運作狀態 | 運行中 / 運行狀態 |
+| Connect / Integrate | 串接 / 連線 | 對接 / 鏈接 |
+| Create | 建立 / 新增 | 創建 |
+| Support | 支援 | 支持 |
+| Time interval / range | 時間區間 / 時段 | 時間段 |

@@ -32,12 +32,12 @@ pub fn Home() -> Element {
                         if is_fully_configured {
                             "🎉 全功能就緒"
                         } else {
-                            "🚀 新手配置中"
+                            "🚀 新手設定中"
                         }
                     }
                     h1 { class: "text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl", "Data Viewer" }
                     p { class: "text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed",
-                        "專案、設備與傳感器歷史數據的一站式管理平台。在這裡您可以輕鬆對接多個端點，流式導入專案並監控設備狀態。"
+                        "專案、裝置與感測器歷史資料的一站式管理平台。在這裡您可以輕鬆串接多個端點，即時匯入專案並監控裝置狀態。"
                     }
                 }
             }
@@ -47,13 +47,13 @@ pub fn Home() -> Element {
                 div { class: "flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-4",
                     div {
                         h2 { class: "text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100",
-                            if is_fully_configured { "🎉 配置完成！開始探索您的數據" } else { "🔌 快速上手引導" }
+                            if is_fully_configured { "🎉 設定完成！開始探索您的資料" } else { "🔌 快速上手引導" }
                         }
                         p { class: "text-slate-500 dark:text-slate-400 mt-1",
                             if is_fully_configured {
-                                "您已成功配置了 {endpoint_count} 個 API 端點並建立了 {project_count} 個專案。"
+                                "您已成功設定了 {endpoint_count} 個 API 端點並建立了 {project_count} 個專案。"
                             } else {
-                                "完成以下兩個簡單步驟，即可打通您的數據監控流。"
+                                "完成以下兩個簡單步驟，即可啟用您的資料監控流程。"
                             }
                         }
                     }
@@ -88,7 +88,7 @@ pub fn Home() -> Element {
                                 if has_endpoints {
                                     span { class: "flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 font-medium",
                                         Icon { icon: fa_solid_icons::FaCheck, width: 14, height: 14 }
-                                        "已配置"
+                                        "已設定"
                                     }
                                 }
                             }
@@ -99,13 +99,13 @@ pub fn Home() -> Element {
                                     Icon { icon: fa_solid_icons::FaLink, width: 20, height: 20 }
                                 }
                                 div {
-                                    h3 { class: "text-lg font-semibold text-slate-900 dark:text-slate-100", "配置 API 連線端點" }
+                                    h3 { class: "text-lg font-semibold text-slate-900 dark:text-slate-100", "設定 API 連線端點" }
                                     p { class: "text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed",
-                                        "端點是用於獲取感測器和專案數據的 API 服務器地址。請在此配置您的 General 或 Edge 服務器 URL。"
+                                        "端點是用於取得感測器與專案資料的 API 伺服器網址。請在此設定您的 General 或 Edge 伺服器 URL。"
                                     }
                                     if has_endpoints {
                                         p { class: "text-xs text-emerald-600 dark:text-emerald-400 mt-2 font-medium",
-                                            "✓ 當前已啟用 {endpoint_count} 個活躍端點連線"
+                                            "✓ 目前已啟用 {endpoint_count} 個活躍的端點連線"
                                         }
                                     }
                                 }
@@ -120,7 +120,7 @@ pub fn Home() -> Element {
                                 } else {
                                     "inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white"
                                 },
-                                if has_endpoints { "管理連線端點" } else { "配置您的端點 ➔" }
+                                if has_endpoints { "管理連線端點" } else { "設定您的端點 ➔" }
                             }
                         }
                     }
@@ -168,9 +168,9 @@ pub fn Home() -> Element {
                                     Icon { icon: fa_solid_icons::FaCirclePlus, width: 20, height: 20 }
                                 }
                                 div {
-                                    h3 { class: "text-lg font-semibold text-slate-900 dark:text-slate-100", "建立或導入專案" }
+                                    h3 { class: "text-lg font-semibold text-slate-900 dark:text-slate-100", "建立或匯入專案" }
                                     p { class: "text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed",
-                                        "您可以手動新增專案，或透過已配置的端點直接流式導入現有專案。專案將包含其下屬的全部感測設備。"
+                                        "您可以手動新增專案，或透過已設定的端點直接即時匯入現有專案。專案將包含其所屬的全部感測裝置。"
                                     }
                                     if !has_endpoints {
                                         p { class: "text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium",
@@ -178,7 +178,7 @@ pub fn Home() -> Element {
                                         }
                                     } else if has_projects {
                                         p { class: "text-xs text-emerald-600 dark:text-emerald-400 mt-2 font-medium",
-                                            "✓ 當前已成功導入並管理 {project_count} 個專案"
+                                            "✓ 目前已成功匯入並管理 {project_count} 個專案"
                                         }
                                     }
                                 }
@@ -221,7 +221,7 @@ pub fn Home() -> Element {
                             class: "flex items-center justify-between p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-indigo-500 group",
                             div {
                                 div { class: "font-semibold text-slate-900 dark:text-slate-100", "專案儀表板" }
-                                div { class: "text-xs text-slate-500 dark:text-slate-400 mt-0.5", "管理設備與傳感器" }
+                                div { class: "text-xs text-slate-500 dark:text-slate-400 mt-0.5", "管理裝置與感測器" }
                             }
                             Icon { icon: fa_solid_icons::FaArrowRight, width: 14, height: 14, class: "text-slate-400" }
                         }
@@ -229,8 +229,8 @@ pub fn Home() -> Element {
                             to: Route::ActiveMonitorView {},
                             class: "flex items-center justify-between p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-indigo-500 group",
                             div {
-                                div { class: "font-semibold text-slate-900 dark:text-slate-100", "設備監測" }
-                                div { class: "text-xs text-slate-500 dark:text-slate-400 mt-0.5", "實時監控設備運行狀態" }
+                                div { class: "font-semibold text-slate-900 dark:text-slate-100", "裝置監控" }
+                                div { class: "text-xs text-slate-500 dark:text-slate-400 mt-0.5", "即時監控裝置運作狀態" }
                             }
                             Icon { icon: fa_solid_icons::FaArrowRight, width: 14, height: 14, class: "text-slate-400" }
                         }
@@ -253,23 +253,23 @@ pub fn Home() -> Element {
                 div { class: "grid grid-cols-1 md:grid-cols-3 gap-6",
                     div { class: "p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3",
                         div { class: "w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg", "✓" }
-                        h3 { class: "font-bold text-slate-900 dark:text-slate-100 text-lg", "專案與設備管理" }
+                        h3 { class: "font-bold text-slate-900 dark:text-slate-100 text-lg", "專案與裝置管理" }
                         p { class: "text-sm text-slate-500 dark:text-slate-400 leading-relaxed",
-                            "支持手動創建、刪除或從 Auth Info (General/Edge) 導入專案。完整顯示設備清單、傳感器最新數值等核心數據。"
+                            "支援手動建立、刪除或從 Auth Info (General/Edge) 匯入專案。完整顯示裝置清單、感測器最新數值等核心資料。"
                         }
                     }
                     div { class: "p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3",
                         div { class: "w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg", "✓" }
-                        h3 { class: "font-bold text-slate-900 dark:text-slate-100 text-lg", "歷史數據與圖像回溯" }
+                        h3 { class: "font-bold text-slate-900 dark:text-slate-100 text-lg", "歷史資料與影像回溯" }
                         p { class: "text-sm text-slate-500 dark:text-slate-400 leading-relaxed",
-                            "針對數值傳感器提供歷史變化趨勢；針對圖像傳感器則支持歷史圖庫、基於時間段與篩選條件的圖像精確回溯。"
+                            "針對數值感測器提供歷史變化趨勢；針對影像感測器則支援歷史圖庫、基於時間區間與篩選條件的影像精確回溯。"
                         }
                     }
                     div { class: "p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3",
                         div { class: "w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg", "✓" }
-                        h3 { class: "font-bold text-slate-900 dark:text-slate-100 text-lg", "實時活躍監測與 ROI" }
+                        h3 { class: "font-bold text-slate-900 dark:text-slate-100 text-lg", "即時活躍監控與 ROI" }
                         p { class: "text-sm text-slate-500 dark:text-slate-400 leading-relaxed",
-                            "支持多專案設備運行監控、自動定時刷新、告警規則配置。內建 ROI 標註工具，便於對圖像設定警戒感興趣區。"
+                            "支援多專案裝置運作監控、自動定時重新整理、警報規則設定。內建 ROI 標註工具，便於對影像設定警戒感興趣區。"
                         }
                     }
                 }
@@ -281,9 +281,9 @@ pub fn Home() -> Element {
                     Icon { icon: fa_solid_icons::FaCheck, width: 18, height: 18 }
                 }
                 div { class: "space-y-1",
-                    h4 { class: "font-semibold text-blue-950 dark:text-blue-100 text-sm", "🔒 數據與安全隱私提示" }
+                    h4 { class: "font-semibold text-blue-950 dark:text-blue-100 text-sm", "🔒 資料與安全隱私提示" }
                     p { class: "text-xs text-blue-900/80 dark:text-blue-300 leading-relaxed",
-                        "您的所有配置（包括 Endpoints 連線、專案詳情、Auth Infos 認證）均持久化存儲於您的瀏覽器本地（LocalStorage/Storage Crate）。我們不會收集或將您的任何隱私密鑰與數據上傳至雲端，請放心使用。"
+                        "您的所有設定（包括 Endpoints 連線、專案詳情、Auth Infos 認證）均持久儲存於您的瀏覽器本機（LocalStorage/Storage Crate）。我們不會收集或將您的任何隱私金鑰與資料上傳至雲端，請放心使用。"
                     }
                 }
             }
