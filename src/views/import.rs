@@ -73,7 +73,7 @@ impl<Lens> Store<DeleteAuthInfoState, Lens> {
 #[component]
 pub fn AuthInfosPage() -> Element {
     use_effect(|| {
-        consume_context::<HeaderContext>().set_title("Auth Infos");
+        consume_context::<HeaderContext>().set_title("Credentials");
     });
 
     let mut auth_infos = use_context::<Signal<AuthInfos>>();
@@ -243,7 +243,7 @@ pub fn AuthInfosPage() -> Element {
                 "⚠ Web version may fail due to CORS restrictions. Use the Linux desktop version for reliable operation."
             }
         }
-        PageHeader { title: "Auth Infos",
+        PageHeader { title: "Credentials",
             Button { onclick: move |_| new_state.open_dialog(), "New" }
         }
         {new_dialog}

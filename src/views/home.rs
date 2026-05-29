@@ -125,7 +125,7 @@ pub fn Home() -> Element {
                         }
                     }
 
-                    // 步驟 2: Add Project
+                    // 步驟 2: Manage Projects
                     div {
                         class: "group relative flex flex-col justify-between p-6 rounded-xl border",
                         class: if !has_endpoints {
@@ -255,7 +255,7 @@ pub fn Home() -> Element {
                         div { class: "w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg", "✓" }
                         h3 { class: "font-bold text-slate-900 dark:text-slate-100 text-lg", "專案與裝置管理" }
                         p { class: "text-sm text-slate-500 dark:text-slate-400 leading-relaxed",
-                            "支援手動建立、刪除或從 Auth Info (General/Edge) 匯入專案。完整顯示裝置清單、感測器最新數值等核心資料。"
+                            "支援手動建立、刪除或從 Credentials (General/Edge) 匯入專案。完整顯示裝置清單、感測器最新數值等核心資料。"
                         }
                     }
                     div { class: "p-5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3",
@@ -283,7 +283,7 @@ pub fn Home() -> Element {
                 div { class: "space-y-1",
                     h4 { class: "font-semibold text-blue-950 dark:text-blue-100 text-sm", "🔒 資料與安全隱私提示" }
                     p { class: "text-xs text-blue-900/80 dark:text-blue-300 leading-relaxed",
-                        "您的所有設定（包括 Endpoints 連線、專案詳情、Auth Infos 認證）均持久儲存於您的瀏覽器本機（LocalStorage/Storage Crate）。我們不會收集或將您的任何隱私金鑰與資料上傳至雲端，請放心使用。"
+                        "您的所有設定（包括 Endpoints 連線、專案詳情、Credentials 認證）均持久儲存於您的瀏覽器本機（LocalStorage/Storage Crate）。我們不會收集或將您的任何隱私金鑰與資料上傳至雲端，請放心使用。"
                     }
                 }
             }

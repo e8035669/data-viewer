@@ -76,7 +76,7 @@ pub fn Navbar() -> Element {
                                 SidebarLink {
                                     to: Route::ProjectsView {},
                                     icon: fa_solid_icons::FaCirclePlus,
-                                    "Add Project"
+                                    "Manage Projects"
                                 }
                             }
                         }
@@ -117,7 +117,7 @@ pub fn Navbar() -> Element {
                                 SidebarLink {
                                     to: Route::AuthInfosPage {},
                                     icon: fa_solid_icons::FaKey,
-                                    "Auth Infos"
+                                    "Credentials"
                                 }
                             }
                         }
