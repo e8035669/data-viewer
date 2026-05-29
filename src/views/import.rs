@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{
     components::{
         button::{Button, ButtonVariant},
-        card::{Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle},
+        card::{Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle},
         dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle},
         input::Input,
         radio_group::{RadioGroup, RadioItem},
@@ -265,14 +265,7 @@ fn AuthInfoCard(name: String, info: AuthInfo, delete_state: Store<DeleteAuthInfo
     rsx! {
         Card {
             CardHeader {
-                CardTitle {
-                    Link {
-                        to: Route::ProjectImportPage {
-                            auth_info_name: name_for_nav.clone(),
-                        },
-                        {name.as_str()}
-                    }
-                }
+                CardTitle { {name.as_str()} }
                 CardDescription {
                     p { "Type: {kind}" }
                     p { class: "truncate", "URL: {summary}" }
@@ -283,6 +276,17 @@ fn AuthInfoCard(name: String, info: AuthInfo, delete_state: Store<DeleteAuthInfo
                         onclick: move |_| delete_state.prompt_delete(&name_for_delete),
                         Icon { icon: fa_solid_icons::FaTrash }
                     }
+                }
+            }
+            CardFooter {
+                Link {
+                    to: Route::ProjectImportPage {
+                        auth_info_name: name_for_nav,
+                    },
+                    class: "ml-auto button flex items-center gap-2",
+                    "data-style": "ghost",
+                    "Open"
+                    Icon { icon: fa_solid_icons::FaArrowRight }
                 }
             }
         }
