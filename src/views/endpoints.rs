@@ -17,7 +17,7 @@ use dioxus_primitives::{
 use crate::components::{
     button::{Button, ButtonVariant},
     card::{Card, CardAction, CardDescription, CardHeader, CardTitle},
-    dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle},
+    dialog::{DialogDescription, Dialog, DialogTitle},
     input::Input,
     radio_group::{RadioGroup, RadioItem},
 };
@@ -111,45 +111,43 @@ pub fn EndpointView() -> Element {
     };
 
     let new_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *new_info.is_open().read(),
             on_open_change: move |v| new_info.is_open().set(v),
-            DialogContent {
-                button {
-                    class: Styles::dx_dialog_close,
-                    r#type: "button",
-                    aria_label: "Close",
-                    tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
-                    onclick: move |_| new_info.is_open().set(false),
-                    "×"
-                }
-                DialogTitle { "New Endpoint" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        Label { html_for: "endpoint_name", "Name" }
-                        Input {
-                            id: "endpoint_name",
-                            oninput: move |e: FormEvent| new_info.name().set(e.value()),
-                        }
-
-                        Label { html_for: "endpoint_url", "Endpoint URL" }
-                        Input {
-                            id: "endpoint_url",
-                            placeholder: "https://example.com/api/v1",
-                            oninput: move |e: FormEvent| new_info.endpoint_url().set(e.value()),
-                        }
-
-                        Label { html_for: "kind", "Kind" }
-                        RadioGroup {
-                            id: "kind",
-                            value: "{new_info.kind()}",
-                            on_value_change: move |v| new_info.kind().set(v),
-                            RadioItem { index: 0usize, value: "General", "General" }
-                            RadioItem { index: 1usize, value: "Edge", "Edge" }
-                        }
-
-                        Button { r#type: "submit", onclick: on_new_submit, "Submit" }
+            button {
+                class: Styles::dx_dialog_close,
+                r#type: "button",
+                aria_label: "Close",
+                tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
+                onclick: move |_| new_info.is_open().set(false),
+                "×"
+            }
+            DialogTitle { "New Endpoint" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    Label { html_for: "endpoint_name", "Name" }
+                    Input {
+                        id: "endpoint_name",
+                        oninput: move |e: FormEvent| new_info.name().set(e.value()),
                     }
+
+                    Label { html_for: "endpoint_url", "Endpoint URL" }
+                    Input {
+                        id: "endpoint_url",
+                        placeholder: "https://example.com/api/v1",
+                        oninput: move |e: FormEvent| new_info.endpoint_url().set(e.value()),
+                    }
+
+                    Label { html_for: "kind", "Kind" }
+                    RadioGroup {
+                        id: "kind",
+                        value: "{new_info.kind()}",
+                        on_value_change: move |v| new_info.kind().set(v),
+                        RadioItem { index: 0usize, value: "General", "General" }
+                        RadioItem { index: 1usize, value: "Edge", "Edge" }
+                    }
+
+                    Button { r#type: "submit", onclick: on_new_submit, "Submit" }
                 }
             }
         }
@@ -162,25 +160,23 @@ pub fn EndpointView() -> Element {
     };
 
     let delete_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *delete_info.is_open().read(),
             on_open_change: move |v| delete_info.is_open().set(v),
-            DialogContent {
-                DialogTitle { "Delete Confirm" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        "Delete endpoint {delete_info.target()}"
-                        div { class: "flex justify-end gap-4",
-                            Button {
-                                variant: ButtonVariant::Primary,
-                                onclick: move |_| delete_info.is_open().set(false),
-                                "NO"
-                            }
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+            DialogTitle { "Delete Confirm" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    "Delete endpoint {delete_info.target()}"
+                    div { class: "flex justify-end gap-4",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            onclick: move |_| delete_info.is_open().set(false),
+                            "NO"
+                        }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            onclick: on_delete_confirm,
+                            "Yes"
                         }
                     }
                 }

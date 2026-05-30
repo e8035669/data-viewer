@@ -4,7 +4,7 @@ use crate::{
     components::{
         button::{Button, ButtonVariant},
         card::{Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle},
-        dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle},
+        dialog::{Dialog, DialogDescription, DialogTitle},
         input::Input,
         radio_group::{RadioGroup, RadioItem},
     },
@@ -128,64 +128,62 @@ pub fn AuthInfosPage() -> Element {
     };
 
     let new_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *new_state.is_open().read(),
             on_open_change: move |v| new_state.is_open().set(v),
-            DialogContent {
-                button {
-                    class: Styles::dx_dialog_close,
-                    r#type: "button",
-                    aria_label: "Close",
-                    tabindex: if *new_state.is_open().read() { "0" } else { "-1" },
-                    onclick: move |_| new_state.is_open().set(false),
-                    "×"
-                }
-                DialogTitle { "New Auth Info" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        Label { html_for: "auth_name", "Name" }
-                        Input {
-                            id: "auth_name",
-                            oninput: move |e: FormEvent| new_state.name().set(e.value()),
-                        }
-
-                        Label { html_for: "auth_kind", "Kind" }
-                        RadioGroup {
-                            id: "auth_kind",
-                            value: "{new_state.kind()}",
-                            on_value_change: move |v| new_state.kind().set(v),
-                            RadioItem { index: 0usize, value: "General", "General" }
-                            RadioItem { index: 1usize, value: "Edge", "Edge" }
-                        }
-
-                        if new_state.kind()().as_str() == "General" {
-                            Label { html_for: "general_url", "Endpoint URL" }
-                            Input {
-                                id: "general_url",
-                                placeholder: "https://example.com/api/v1",
-                                oninput: move |e: FormEvent| new_state.endpoint_url().set(e.value()),
-                            }
-                            Label { html_for: "general_key", "X-API-Key" }
-                            Input {
-                                id: "general_key",
-                                oninput: move |e: FormEvent| new_state.x_api_key().set(e.value()),
-                            }
-                        } else {
-                            Label { html_for: "edge_url", "Auth URL" }
-                            Input {
-                                id: "edge_url",
-                                placeholder: "https://example.com/edge/v1/auth?username=...",
-                                oninput: move |e: FormEvent| new_state.edge_url().set(e.value()),
-                            }
-                            Label { html_for: "edge_digest", "Digest" }
-                            Input {
-                                id: "edge_digest",
-                                oninput: move |e: FormEvent| new_state.digest().set(e.value()),
-                            }
-                        }
-
-                        Button { r#type: "submit", onclick: on_new_submit, "Submit" }
+            button {
+                class: Styles::dx_dialog_close,
+                r#type: "button",
+                aria_label: "Close",
+                tabindex: if *new_state.is_open().read() { "0" } else { "-1" },
+                onclick: move |_| new_state.is_open().set(false),
+                "×"
+            }
+            DialogTitle { "New Auth Info" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    Label { html_for: "auth_name", "Name" }
+                    Input {
+                        id: "auth_name",
+                        oninput: move |e: FormEvent| new_state.name().set(e.value()),
                     }
+
+                    Label { html_for: "auth_kind", "Kind" }
+                    RadioGroup {
+                        id: "auth_kind",
+                        value: "{new_state.kind()}",
+                        on_value_change: move |v| new_state.kind().set(v),
+                        RadioItem { index: 0usize, value: "General", "General" }
+                        RadioItem { index: 1usize, value: "Edge", "Edge" }
+                    }
+
+                    if new_state.kind()().as_str() == "General" {
+                        Label { html_for: "general_url", "Endpoint URL" }
+                        Input {
+                            id: "general_url",
+                            placeholder: "https://example.com/api/v1",
+                            oninput: move |e: FormEvent| new_state.endpoint_url().set(e.value()),
+                        }
+                        Label { html_for: "general_key", "X-API-Key" }
+                        Input {
+                            id: "general_key",
+                            oninput: move |e: FormEvent| new_state.x_api_key().set(e.value()),
+                        }
+                    } else {
+                        Label { html_for: "edge_url", "Auth URL" }
+                        Input {
+                            id: "edge_url",
+                            placeholder: "https://example.com/edge/v1/auth?username=...",
+                            oninput: move |e: FormEvent| new_state.edge_url().set(e.value()),
+                        }
+                        Label { html_for: "edge_digest", "Digest" }
+                        Input {
+                            id: "edge_digest",
+                            oninput: move |e: FormEvent| new_state.digest().set(e.value()),
+                        }
+                    }
+
+                    Button { r#type: "submit", onclick: on_new_submit, "Submit" }
                 }
             }
         }
@@ -198,25 +196,23 @@ pub fn AuthInfosPage() -> Element {
     };
 
     let delete_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *delete_state.is_open().read(),
             on_open_change: move |v| delete_state.is_open().set(v),
-            DialogContent {
-                DialogTitle { "Delete Confirm" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        "Delete auth info '{delete_state.target()}'?"
-                        div { class: "flex justify-end gap-4",
-                            Button {
-                                variant: ButtonVariant::Primary,
-                                onclick: move |_| delete_state.is_open().set(false),
-                                "No"
-                            }
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+            DialogTitle { "Delete Confirm" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    "Delete auth info '{delete_state.target()}'?"
+                    div { class: "flex justify-end gap-4",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            onclick: move |_| delete_state.is_open().set(false),
+                            "No"
+                        }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            onclick: on_delete_confirm,
+                            "Yes"
                         }
                     }
                 }
@@ -269,8 +265,7 @@ fn AuthInfoCard(name: String, info: AuthInfo, delete_state: Store<DeleteAuthInfo
         Card {
             CardHeader {
                 CardTitle { {name.as_str()} }
-                CardDescription {
-                    class: format!("{} {}", CardStyles::dx_card_description, "min-w-0"),
+                CardDescription { class: format!("{} {}", CardStyles::dx_card_description, "min-w-0"),
                     p { "Type: {kind}" }
                     p { "URL: {summary}" }
                 }
@@ -408,59 +403,57 @@ pub fn ProjectImportPage(auth_info_name: String) -> Element {
     });
 
     let import_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *import_state.is_open().read(),
             on_open_change: move |v| import_state.is_open().set(v),
-            DialogContent {
-                button {
-                    class: Styles::dx_dialog_close,
-                    r#type: "button",
-                    aria_label: "Close",
-                    tabindex: if *import_state.is_open().read() { "0" } else { "-1" },
-                    onclick: move |_| import_state.is_open().set(false),
-                    "×"
-                }
-                DialogTitle { "Import Project" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        Label { html_for: "import_name", "Project Name" }
-                        Input {
-                            id: "import_name",
-                            value: "{import_state.project_name()}",
-                            oninput: move |e: FormEvent| import_state.project_name().set(e.value()),
-                        }
-
-                        Label { html_for: "import_key", "Project Key" }
-                        if import_state.available_keys()().len() > 1 {
-                            RadioGroup {
-                                id: "import_key",
-                                value: import_state.project_key()(),
-                                on_value_change: move |v: String| import_state.project_key().set(v),
-                                {key_items}
-                            }
-                        } else {
-                            Input {
-                                id: "import_key",
-                                value: "{import_state.project_key()}",
-                                oninput: move |e: FormEvent| import_state.project_key().set(e.value()),
-                            }
-                        }
-
-                        Label { html_for: "import_endpoint", "Endpoint" }
-                        div { id: "import_endpoint",
-                            if endpoints().is_empty() {
-                                p { "No endpoints available. Add one first." }
-                            } else {
-                                RadioGroup {
-                                    value: import_state.endpoint_key()(),
-                                    on_value_change: move |v: String| import_state.endpoint_key().set(v),
-                                    {endpoint_items}
-                                }
-                            }
-                        }
-
-                        Button { r#type: "submit", onclick: on_import_submit, "Import" }
+            button {
+                class: Styles::dx_dialog_close,
+                r#type: "button",
+                aria_label: "Close",
+                tabindex: if *import_state.is_open().read() { "0" } else { "-1" },
+                onclick: move |_| import_state.is_open().set(false),
+                "×"
+            }
+            DialogTitle { "Import Project" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    Label { html_for: "import_name", "Project Name" }
+                    Input {
+                        id: "import_name",
+                        value: "{import_state.project_name()}",
+                        oninput: move |e: FormEvent| import_state.project_name().set(e.value()),
                     }
+
+                    Label { html_for: "import_key", "Project Key" }
+                    if import_state.available_keys()().len() > 1 {
+                        RadioGroup {
+                            id: "import_key",
+                            value: import_state.project_key()(),
+                            on_value_change: move |v: String| import_state.project_key().set(v),
+                            {key_items}
+                        }
+                    } else {
+                        Input {
+                            id: "import_key",
+                            value: "{import_state.project_key()}",
+                            oninput: move |e: FormEvent| import_state.project_key().set(e.value()),
+                        }
+                    }
+
+                    Label { html_for: "import_endpoint", "Endpoint" }
+                    div { id: "import_endpoint",
+                        if endpoints().is_empty() {
+                            p { "No endpoints available. Add one first." }
+                        } else {
+                            RadioGroup {
+                                value: import_state.endpoint_key()(),
+                                on_value_change: move |v: String| import_state.endpoint_key().set(v),
+                                {endpoint_items}
+                            }
+                        }
+                    }
+
+                    Button { r#type: "submit", onclick: on_import_submit, "Import" }
                 }
             }
         }

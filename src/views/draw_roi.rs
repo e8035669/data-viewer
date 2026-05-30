@@ -29,6 +29,9 @@ use euclid::{point2, size2, Point2D};
 use indexmap::{IndexMap, IndexSet};
 use time::OffsetDateTime;
 
+#[css_module("/src/components/input/style.css")]
+struct InputStyles;
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolMode {
     /// 檢視工具, 僅能查看目前畫的ROI
@@ -1843,7 +1846,7 @@ pub fn DrawRoiPage() -> Element {
 
             div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
                 Input {
-                    class: "dx-input font-mono",
+                    class: format!("{} {}", InputStyles::dx_input, "font-mono"),
                     placeholder: "貼上 Base64 圖片字串（可含 data:image/...;base64, 前綴）",
                     value: image_base64_input(),
                     oninput: on_image_base64_input,
@@ -1857,7 +1860,7 @@ pub fn DrawRoiPage() -> Element {
 
             div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
                 Input {
-                    class: "dx-input font-mono",
+                    class: format!("{} {}", InputStyles::dx_input, "font-mono"),
                     placeholder: "貼上 ROI 清單字串",
                     value: roi_import_text(),
                     oninput: on_roi_import_input,
@@ -1995,11 +1998,58 @@ fn TooltipToolbarButton(
 }
 
 #[component]
+fn ToolbarGroupFix(
+    #[props(default = true)] horizontal: bool,
+    #[props(extends = GlobalAttributes)]
+    #[props(extends = div)]
+    attributes: Vec<Attribute>,
+    children: Element,
+) -> Element {
+    let style = if !horizontal { "flex-col!" } else { "" };
+    rsx! {
+        ToolbarGroup { class: style, attributes, {children} }
+    }
+}
+
+#[component]
+fn ToolbarSeparatorFix(
+    #[props(default = true)] horizontal: bool,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
+) -> Element {
+    let style = if !horizontal {
+        " w-[24px]! h-px! mt-[5px]! mb-[5px]! mr-[5px]! ml-[5px]!"
+    } else {
+        ""
+    };
+    rsx! {
+        ToolbarSeparator { class: style, attributes }
+    }
+}
+
+#[component]
+pub fn ToolbarFix(
+    #[props(default = true)] horizontal: bool,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
+    children: Element,
+) -> Element {
+    let style = if !horizontal {
+        "flex-col! flex-wrap!"
+    } else {
+        ""
+    };
+
+    rsx! {
+        Toolbar { attributes, class: style, {children} }
+    }
+}
+
+#[component]
 fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
     let toast_api = use_toast();
+    // let toolbar_group_style = if !horizontal { "flex-col!" } else { "" };
     rsx! {
-        Toolbar { horizontal,
-            ToolbarGroup {
+        ToolbarFix { horizontal,
+            ToolbarGroupFix { horizontal,
                 ToggleToolbarButton {
                     index: 0usize,
                     is_on: draw_roi_ctx.tool_ctx.read().mode == ToolMode::View,
@@ -2038,9 +2088,9 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                 }
             }
 
-            ToolbarSeparator { horizontal }
+            ToolbarSeparatorFix { horizontal }
 
-            ToolbarGroup {
+            ToolbarGroupFix { horizontal,
                 TooltipToolbarButton {
                     index: 4usize,
                     on_click: move || async move {
@@ -2067,9 +2117,9 @@ fn DrawRoiToolbar(draw_roi_ctx: DrawRoiContext, horizontal: bool) -> Element {
                 }
             }
 
-            ToolbarSeparator { horizontal }
+            ToolbarSeparatorFix { horizontal }
 
-            ToolbarGroup {
+            ToolbarGroupFix { horizontal,
                 TooltipToolbarButton {
                     index: 7usize,
                     on_click: move || async move {

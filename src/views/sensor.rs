@@ -6,17 +6,15 @@ use crate::components::button::{Button, ButtonVariant};
 use crate::components::card::{
     Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 };
-use crate::components::dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle};
+use crate::components::dialog::{Dialog, DialogDescription, DialogTitle};
 use crate::components::dropdown_menu::{
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 };
 use crate::components::input::Input;
 use crate::components::label::Label;
 use crate::components::radio_group::{RadioGroup, RadioItem};
-use crate::components::select::{
-    Select, SelectGroup, SelectItemIndicator, SelectList, SelectOption, SelectTrigger, SelectValue,
-};
-use crate::components::switch::{Switch, SwitchThumb};
+use crate::components::select::{Select, SelectGroup, SelectOption};
+use crate::components::switch::Switch;
 use crate::components::textarea::Textarea;
 use crate::views::global::HeaderContext;
 use anyhow::{anyhow, Error, Result};
@@ -38,6 +36,9 @@ use crate::models::{
     Device, EditDevice, EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project,
     Projects, RawData, Rule1, Sensor, SensorStoreExt, SensorType, SensorWithData,
 };
+
+#[css_module("/src/components/input/style.css")]
+struct InputStyles;
 
 #[component]
 pub fn SensorPanel() -> Element {
@@ -446,26 +447,25 @@ pub fn DevicesPanels3(
     };
 
     let dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: new_device_open(),
             on_open_change: move |v| new_device_open.set(v),
-            DialogContent {
-                DialogTitle { "New Device" }
-                div { class: "grid grid-cols-1 gap-4",
-                    Label { html_for: "add_device_name", "Name" }
-                    Input {
-                        id: "add_device_name",
-                        value: new_device().name,
-                        oninput: move |e: FormEvent| new_device.write().name = e.value(),
-                    }
-                    Label { html_for: "add_device_desc", "Description" }
-                    Textarea {
-                        id: "add_device_desc",
-                        value: new_device().desc,
-                        oninput: move |e: FormEvent| new_device.write().desc = Some(e.value()),
-                    }
-                    Button { onclick: on_create_btn, "Create" }
+            DialogTitle { "New Device" }
+            // TODO: DialogDescription
+            div { class: "grid grid-cols-1 gap-4",
+                Label { html_for: "add_device_name", "Name" }
+                Input {
+                    id: "add_device_name",
+                    value: new_device().name,
+                    oninput: move |e: FormEvent| new_device.write().name = e.value(),
                 }
+                Label { html_for: "add_device_desc", "Description" }
+                Textarea {
+                    id: "add_device_desc",
+                    value: new_device().desc,
+                    oninput: move |e: FormEvent| new_device.write().desc = Some(e.value()),
+                }
+                Button { onclick: on_create_btn, "Create" }
             }
         }
     };
@@ -497,25 +497,23 @@ pub fn DevicesPanels3(
         project_meta.restart();
     };
     let delete_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *delete_ctx.is_open().read(),
             on_open_change: move |v| delete_ctx.is_open().set(v),
-            DialogContent {
-                DialogTitle { "Delete Device" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        "Delete device {delete_ctx.target()}"
-                        div { class: "flex justify-end gap-4",
-                            Button {
-                                variant: ButtonVariant::Primary,
-                                onclick: move |_| delete_ctx.is_open().set(false),
-                                "NO"
-                            }
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+            DialogTitle { "Delete Device" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    "Delete device {delete_ctx.target()}"
+                    div { class: "flex justify-end gap-4",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            onclick: move |_| delete_ctx.is_open().set(false),
+                            "NO"
+                        }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            onclick: on_delete_confirm,
+                            "Yes"
                         }
                     }
                 }
@@ -829,46 +827,45 @@ pub fn SensorView3(
     });
 
     let new_sensor_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: new_sensor_open(),
             on_open_change: move |v| new_sensor_open.set(v),
 
-            DialogContent {
-                DialogTitle { "New Sensor" }
-                div { class: "grid grid-cols-1 gap-4",
-                    Label { html_for: "new_sensor_id", "ID" }
-                    Input {
-                        id: "new_sensor_id",
-                        value: new_sensor.id(),
-                        oninput: move |e: FormEvent| new_sensor.id().set(e.value()),
-                    }
-
-                    Label { html_for: "new_sensor_name", "Name" }
-                    Input {
-                        id: "new_sensor_name",
-                        value: new_sensor.name(),
-                        oninput: move |e: FormEvent| new_sensor.name().set(e.value()),
-                    }
-                    Label { html_for: "new_sensor_desc", "Description" }
-                    Textarea {
-                        id: "new_sensor_desc",
-                        value: new_sensor.desc(),
-                        oninput: move |e: FormEvent| new_sensor.desc().set(Some(e.value())),
-                    }
-                    Label { html_for: "new_sensor_type", "Type" }
-                    RadioGroup {
-                        id: "new_sensor_type",
-                        on_value_change: move |v: String| {
-                            if let Ok(v) = serde_json::from_str(&v) {
-                                new_sensor.kind().set(v);
-                            }
-                        },
-                        value: serde_json::to_string(&*new_sensor.kind().read()).unwrap(),
-                        {radio_items}
-                    }
-
-                    Button { onclick: on_create_btn, "Create" }
+            DialogTitle { "New Sensor" }
+            // TODO: DialogDescription
+            div { class: "grid grid-cols-1 gap-4",
+                Label { html_for: "new_sensor_id", "ID" }
+                Input {
+                    id: "new_sensor_id",
+                    value: new_sensor.id(),
+                    oninput: move |e: FormEvent| new_sensor.id().set(e.value()),
                 }
+
+                Label { html_for: "new_sensor_name", "Name" }
+                Input {
+                    id: "new_sensor_name",
+                    value: new_sensor.name(),
+                    oninput: move |e: FormEvent| new_sensor.name().set(e.value()),
+                }
+                Label { html_for: "new_sensor_desc", "Description" }
+                Textarea {
+                    id: "new_sensor_desc",
+                    value: new_sensor.desc(),
+                    oninput: move |e: FormEvent| new_sensor.desc().set(Some(e.value())),
+                }
+                Label { html_for: "new_sensor_type", "Type" }
+                RadioGroup {
+                    id: "new_sensor_type",
+                    on_value_change: move |v: String| {
+                        if let Ok(v) = serde_json::from_str(&v) {
+                            new_sensor.kind().set(v);
+                        }
+                    },
+                    value: serde_json::to_string(&*new_sensor.kind().read()).unwrap(),
+                    {radio_items}
+                }
+
+                Button { onclick: on_create_btn, "Create" }
             }
         }
     };
@@ -902,25 +899,23 @@ pub fn SensorView3(
     };
 
     let delete_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *delete_ctx.is_open().read(),
             on_open_change: move |v| delete_ctx.is_open().set(v),
-            DialogContent {
-                DialogTitle { "Delete Sensor" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        "Delete sensor {delete_ctx.target()}"
-                        div { class: "flex justify-end gap-4",
-                            Button {
-                                variant: ButtonVariant::Primary,
-                                onclick: move |_| delete_ctx.is_open().set(false),
-                                "NO"
-                            }
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+            DialogTitle { "Delete Sensor" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    "Delete sensor {delete_ctx.target()}"
+                    div { class: "flex justify-end gap-4",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            onclick: move |_| delete_ctx.is_open().set(false),
+                            "NO"
+                        }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            onclick: on_delete_confirm,
+                            "Yes"
                         }
                     }
                 }
@@ -1272,7 +1267,7 @@ pub fn DeviceAttrPanelImpl(
             div { "Name" }
             div {
                 Input {
-                    class: "dx-input w-full",
+                    class: format!("{} {}", InputStyles::dx_input, "w-full"),
                     oninput: move |i: FormEvent| { device_info.write().name = i.value() },
                     value: device_info().name,
                 }
@@ -1313,7 +1308,7 @@ pub fn DeviceAttrPanelImpl(
                 div { class: "flex gap-4 mb-8",
                     div { class: "flex flex-1 gap-4 flex-wrap",
                         Input {
-                            class: "dx-input flex-1",
+                            class: format!("{} {}", InputStyles::dx_input, "flex-1"),
                             placeholder: "Key",
                             onchange: move |e: FormEvent| {
                                 attributes.write()[i].key = e.value();
@@ -1321,15 +1316,13 @@ pub fn DeviceAttrPanelImpl(
                             value: attr.key.clone(),
                         }
                         Input {
-                            class: "dx-input flex-1",
-
+                            class: format!("{} {}", InputStyles::dx_input, "flex-1"),
                             placeholder: "Value",
                             onchange: move |e: FormEvent| {
                                 attributes.write()[i].value = e.value();
                             },
                             value: attr.value.clone(),
                         }
-                    
                     }
                     Button {
                         variant: ButtonVariant::Ghost,
@@ -1338,7 +1331,6 @@ pub fn DeviceAttrPanelImpl(
                         },
                         Icon { icon: fa_solid_icons::FaXmark }
                     }
-                
                 }
             }
         }
@@ -1525,7 +1517,6 @@ pub fn SensorAttrPanelImpl(
                         onclick: save_attrs,
                         "Save"
                     }
-                
                 }
             }
             CardContent {
@@ -1533,7 +1524,7 @@ pub fn SensorAttrPanelImpl(
                     div { class: "flex gap-4 mb-8",
                         div { class: "flex flex-1 gap-4 flex-wrap",
                             Input {
-                                class: "dx-input flex-1",
+                                class: format!("{} {}", InputStyles::dx_input, "flex-1"),
                                 placeholder: "Key",
                                 onchange: move |e: FormEvent| {
                                     attributes.write()[i].key = e.value();
@@ -1541,15 +1532,13 @@ pub fn SensorAttrPanelImpl(
                                 value: attr.key.clone(),
                             }
                             Input {
-                                class: "dx-input flex-1",
-
+                                class: format!("{} {}", InputStyles::dx_input, "flex-1"),
                                 placeholder: "Value",
                                 onchange: move |e: FormEvent| {
                                     attributes.write()[i].value = e.value();
                                 },
                                 value: attr.value.clone(),
                             }
-                        
                         }
                         Button {
                             variant: ButtonVariant::Ghost,
@@ -1558,7 +1547,6 @@ pub fn SensorAttrPanelImpl(
                             },
                             Icon { icon: fa_solid_icons::FaXmark }
                         }
-                    
                     }
                 }
             }
@@ -1843,28 +1831,26 @@ fn ActiveNotifyCard(
     };
 
     let delete_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: delete_dialog_open(),
             on_open_change: move |v| delete_dialog_open.set(v),
-            DialogContent {
-                DialogTitle { "Delete Confirm" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        "Delete id {notify().id}"
-                        div { class: "flex justify-end gap-4",
-                            Button {
-                                variant: ButtonVariant::Primary,
-                                onclick: move |_| delete_dialog_open.set(false),
-                                "NO"
-                            }
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_click,
-                                "Yes"
-                            }
+            DialogTitle { "Delete Confirm" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    "Delete id {notify().id}"
+                    div { class: "flex justify-end gap-4",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            onclick: move |_| delete_dialog_open.set(false),
+                            "NO"
                         }
-                    
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            onclick: on_delete_click,
+                            "Yes"
+                        }
                     }
+                
                 }
             }
         }
@@ -1903,7 +1889,6 @@ fn ActiveNotifyCard(
                     Switch {
                         checked: notify_edit().enable,
                         on_checked_change: move |v| notify_edit.write().enable = v,
-                        SwitchThumb {}
                     }
                     "{notify_edit().enable}"
                 }
@@ -2084,10 +2069,7 @@ fn ActiveSettingSection(
     let sensors = device().sensors.clone().unwrap_or_default();
     let sensor_select = sensors.iter().enumerate().map(|(i, s)| {
         rsx! {
-            SelectOption::<Option<String>> { index: i + 1, value: "{s.id}", text_value: "{s.id}",
-                "{s.id}"
-                SelectItemIndicator {}
-            }
+            SelectOption::<Option<String>> { index: i + 1, value: "{s.id}", text_value: "{s.id}", "{s.id}" }
         }
     });
 
@@ -2105,7 +2087,6 @@ fn ActiveSettingSection(
                 Switch {
                     checked: setting_clone().enable,
                     on_checked_change: move |c| setting_clone.write().enable = c,
-                    SwitchThumb {}
                 }
                 "{setting_clone().enable}"
             }
@@ -2161,18 +2142,14 @@ fn ActiveSettingSection(
                     on_value_change: move |e: Option<Option<String>>| {
                         setting_clone.write().sensor = e.unwrap_or_default()
                     },
-                    SelectTrigger { SelectValue {} }
-                    SelectList {
-                        SelectGroup {
-                            SelectOption::<Option<String>> {
-                                index: 0usize,
-                                value: None,
-                                text_value: "(All Sensor)",
-                                "(All Sensor)"
-                                SelectItemIndicator {}
-                            }
-                            {sensor_select}
+                    SelectGroup {
+                        SelectOption::<Option<String>> {
+                            index: 0usize,
+                            value: None,
+                            text_value: "(All Sensor)",
+                            "(All Sensor)"
                         }
+                        {sensor_select}
                     }
                 }
             }
@@ -2393,7 +2370,6 @@ pub fn SensorHistoryPanelImpl(
                 Switch {
                     checked: use_utc(),
                     on_checked_change: move |b| use_utc.set(b),
-                    SwitchThumb {}
                 }
                 p { "UTC" }
             }
@@ -2403,7 +2379,6 @@ pub fn SensorHistoryPanelImpl(
                 Switch {
                     checked: use_asc(),
                     on_checked_change: move |b| use_asc.set(b),
-                    SwitchThumb {}
                 }
                 p { "ASC" }
             }
@@ -2590,10 +2565,7 @@ pub fn TestRule1() -> Element {
     let projects = projects();
     let select_options = projects.keys().enumerate().map(|(i, k)| {
         rsx! {
-            SelectOption::<String> { index: i, value: k.to_string(),
-                {k.to_string()}
-                SelectItemIndicator {}
-            }
+            SelectOption::<String> { index: i, value: k.to_string(), {k.to_string()} }
         }
     });
 
@@ -2601,11 +2573,8 @@ pub fn TestRule1() -> Element {
         Select::<String> {
             default_value: selected_project_key(),
             on_value_change: move |v: Option<String>| selected_project_key.set(v),
-            SelectTrigger { SelectValue {} }
 
-            SelectList {
-                SelectGroup { {select_options} }
-            }
+            SelectGroup { {select_options} }
         }
 
         {content}

@@ -1,15 +1,19 @@
 use crate::components::button::{Button, ButtonVariant};
 use crate::components::separator::Separator;
 use crate::components::sheet::{
-    Sheet, SheetContent, SheetDescription, SheetHeader, SheetSide, SheetTitle,
+    Sheet, SheetContentClose, SheetDescription, SheetHeader, SheetSide, SheetTitle,
 };
+use crate::components::skeleton::Skeleton;
 use crate::components::tooltip::{Tooltip, TooltipContent, TooltipTrigger};
 use dioxus::core::use_drop;
 use dioxus::prelude::*;
+use dioxus_icons::lucide::PanelLeft;
 use dioxus_primitives::dioxus_attributes::attributes;
 use dioxus_primitives::merge_attributes;
 use dioxus_primitives::use_controlled;
-use dioxus_primitives::icon;
+
+#[css_module("/src/components/sidebar/style.css")]
+struct Styles;
 
 // constants
 const SIDEBAR_WIDTH: &str = "16rem";
@@ -240,14 +244,13 @@ pub fn SidebarProvider(
     );
 
     let base = attributes!(div {
-        class: "dx-sidebar-wrapper",
+        class: Styles::dx_sidebar_wrapper,
         "data-slot": "sidebar-wrapper",
         style: sidebar_style,
     });
     let merged = merge_attributes(vec![base, attributes]);
 
     rsx! {
-        document::Link { rel: "stylesheet", href: asset!("./style.css") }
         div { ..merged, {children} }
     }
 }
@@ -272,7 +275,7 @@ pub fn Sidebar(
 
     if collapsible == SidebarCollapsible::None {
         let base = attributes!(div {
-            class: "dx-sidebar dx-sidebar-static",
+            class: Styles::dx_sidebar_static,
             "data-slot": "sidebar",
         });
         let merged = merge_attributes(vec![base, attributes]);
@@ -292,18 +295,17 @@ pub fn Sidebar(
             Sheet {
                 open: open_mobile(),
                 on_open_change: move |v| ctx.set_open_mobile(v),
-                SheetContent {
-                    side: sheet_side,
-                    class: "dx-sidebar-sheet",
-                    "data-sidebar": "sidebar",
-                    "data-slot": "sidebar",
-                    "data-mobile": "true",
-                    SheetHeader { class: "dx-sr-only",
-                        SheetTitle { "Sidebar" }
-                        SheetDescription { "Displays the mobile sidebar." }
-                    }
-                    div { class: "dx-sidebar-mobile-inner", {children} }
+                "data-side": sheet_side.as_str(),
+                class: Styles::dx_sidebar_sheet.to_string(),
+                "data-sidebar": "sidebar",
+                "data-slot": "sidebar",
+                "data-mobile": "true",
+                SheetContentClose { class: Styles::dx_sidebar_sheet_close }
+                SheetHeader { class: Styles::dx_sr_only,
+                    SheetTitle { "Sidebar" }
+                    SheetDescription { "Displays the mobile sidebar." }
                 }
+                div { class: Styles::dx_sidebar_mobile_inner, {children} }
             }
         };
     }
@@ -315,24 +317,24 @@ pub fn Sidebar(
     };
 
     let container_base = attributes!(div {
-        class: "dx-sidebar-container",
+        class: Styles::dx_sidebar_container,
         "data-slot": "sidebar-container",
     });
     let container_attrs = merge_attributes(vec![container_base, attributes]);
 
     rsx! {
         div {
-            class: "dx-sidebar-desktop",
+            class: Styles::dx_sidebar_desktop,
             "data-state": state().as_str(),
             "data-collapsible": collapsible_str,
             "data-variant": variant.as_str(),
             "data-side": side.as_str(),
             "data-slot": "sidebar",
-            div { class: "dx-sidebar-gap", "data-slot": "sidebar-gap" }
+            div { class: Styles::dx_sidebar_gap, "data-slot": "sidebar-gap" }
             div {
                 ..container_attrs,
                 div {
-                    class: "dx-sidebar-inner",
+                    class: Styles::dx_sidebar_inner,
                     "data-sidebar": "sidebar",
                     "data-slot": "sidebar-inner",
                     {children}
@@ -352,7 +354,7 @@ pub fn SidebarTrigger(
     let ctx = use_sidebar();
 
     let base = attributes!(button {
-        class: "dx-sidebar-trigger",
+        class: Styles::dx_sidebar_trigger,
         "data-sidebar": "trigger",
         "data-slot": "sidebar-trigger",
     });
@@ -368,20 +370,11 @@ pub fn SidebarTrigger(
                 ctx.toggle();
             },
             attributes: merged,
-            icon::Icon {
-                class: "dx-sidebar-trigger-icon",
-                width: "1rem",
-                height: "1rem",
-                rect {
-                    x: "3",
-                    y: "3",
-                    width: "18",
-                    height: "18",
-                    rx: "2",
-                }
-                path { d: "M9 3v18" }
+            PanelLeft {
+                class: Styles::dx_sidebar_trigger_icon,
+                size: "1rem",
             }
-            span { class: "dx-sr-only", "Toggle Sidebar" }
+            span { class: Styles::dx_sr_only, "Toggle Sidebar" }
         }
     }
 }
@@ -391,7 +384,7 @@ pub fn SidebarRail(#[props(extends = GlobalAttributes)] attributes: Vec<Attribut
     let ctx = use_sidebar();
 
     let base = attributes!(button {
-        class: "dx-sidebar-rail",
+        class: Styles::dx_sidebar_rail,
         "data-sidebar": "rail",
         "data-slot": "sidebar-rail",
     });
@@ -414,7 +407,7 @@ pub fn SidebarInset(
     children: Element,
 ) -> Element {
     let base = attributes!(main {
-        class: "dx-sidebar-inset",
+        class: Styles::dx_sidebar_inset,
         "data-slot": "sidebar-inset",
     });
     let merged = merge_attributes(vec![base, attributes]);
@@ -430,7 +423,7 @@ pub fn SidebarHeader(
     children: Element,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-header",
+        class: Styles::dx_sidebar_header,
         "data-slot": "sidebar-header",
         "data-sidebar": "header",
     });
@@ -447,7 +440,7 @@ pub fn SidebarContent(
     children: Element,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-content",
+        class: Styles::dx_sidebar_content,
         "data-slot": "sidebar-content",
         "data-sidebar": "content",
     });
@@ -464,7 +457,7 @@ pub fn SidebarFooter(
     children: Element,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-footer",
+        class: Styles::dx_sidebar_footer,
         "data-slot": "sidebar-footer",
         "data-sidebar": "footer",
     });
@@ -482,7 +475,7 @@ pub fn SidebarSeparator(
     #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-separator",
+        class: Styles::dx_sidebar_separator,
         "data-slot": "sidebar-separator",
         "data-sidebar": "separator",
     });
@@ -499,7 +492,7 @@ pub fn SidebarGroup(
     children: Element,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-group",
+        class: Styles::dx_sidebar_group,
         "data-slot": "sidebar-group",
         "data-sidebar": "group",
     });
@@ -517,7 +510,7 @@ pub fn SidebarGroupLabel(
     children: Element,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-group-label",
+        class: Styles::dx_sidebar_group_label,
         "data-slot": "sidebar-group-label",
         "data-sidebar": "group-label",
     });
@@ -539,7 +532,7 @@ pub fn SidebarGroupAction(
     children: Element,
 ) -> Element {
     let base = attributes!(button {
-        class: "dx-sidebar-group-action",
+        class: Styles::dx_sidebar_group_action,
         "data-slot": "sidebar-group-action",
         "data-sidebar": "group-action",
     });
@@ -560,7 +553,7 @@ pub fn SidebarGroupContent(
     children: Element,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-group-content",
+        class: Styles::dx_sidebar_group_content,
         "data-slot": "sidebar-group-content",
         "data-sidebar": "group-content",
     });
@@ -577,7 +570,7 @@ pub fn SidebarMenu(
     children: Element,
 ) -> Element {
     let base = attributes!(ul {
-        class: "dx-sidebar-menu",
+        class: Styles::dx_sidebar_menu,
         "data-slot": "sidebar-menu",
         "data-sidebar": "menu",
     });
@@ -594,7 +587,7 @@ pub fn SidebarMenuItem(
     children: Element,
 ) -> Element {
     let base = attributes!(li {
-        class: "dx-sidebar-menu-item",
+        class: Styles::dx_sidebar_menu_item,
         "data-slot": "sidebar-menu-item",
         "data-sidebar": "menu-item",
     });
@@ -656,7 +649,7 @@ pub fn SidebarMenuButton(
     let state = ctx.state;
 
     let base = attributes!(button {
-        class: "dx-sidebar-menu-button",
+        class: Styles::dx_sidebar_menu_button,
         "data-slot": "sidebar-menu-button",
         "data-sidebar": "menu-button",
         "data-size": size.as_str(),
@@ -678,6 +671,7 @@ pub fn SidebarMenuButton(
 
     rsx! {
         Tooltip {
+            class: Styles::dx_sidebar_tooltip,
             disabled: hidden,
             TooltipTrigger {
                 as: move |tooltip_attrs: Vec<Attribute>| {
@@ -709,7 +703,7 @@ pub fn SidebarMenuAction(
     children: Element,
 ) -> Element {
     let base = attributes!(button {
-        class: "dx-sidebar-menu-action",
+        class: Styles::dx_sidebar_menu_action,
         "data-slot": "sidebar-menu-action",
         "data-sidebar": "menu-action",
         "data-show-on-hover": if show_on_hover { "true" } else { "false" },
@@ -731,7 +725,7 @@ pub fn SidebarMenuBadge(
     children: Element,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-menu-badge",
+        class: Styles::dx_sidebar_menu_badge,
         "data-slot": "sidebar-menu-badge",
         "data-sidebar": "menu-badge",
     });
@@ -748,7 +742,7 @@ pub fn SidebarMenuSkeleton(
     #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
 ) -> Element {
     let base = attributes!(div {
-        class: "dx-sidebar-menu-skeleton",
+        class: Styles::dx_sidebar_menu_skeleton,
         "data-slot": "sidebar-menu-skeleton",
         "data-sidebar": "menu-skeleton",
     });
@@ -758,9 +752,9 @@ pub fn SidebarMenuSkeleton(
         div {
             ..merged,
             if show_icon {
-                div { class: "dx-skeleton dx-sidebar-menu-skeleton-icon" }
+                Skeleton { class: Styles::dx_sidebar_menu_skeleton_icon }
             }
-            div { class: "dx-skeleton dx-sidebar-menu-skeleton-text", width: "70%" }
+            Skeleton { class: Styles::dx_sidebar_menu_skeleton_text, width: "70%" }
         }
     }
 }
@@ -771,7 +765,7 @@ pub fn SidebarMenuSub(
     children: Element,
 ) -> Element {
     let base = attributes!(ul {
-        class: "dx-sidebar-menu-sub",
+        class: Styles::dx_sidebar_menu_sub,
         "data-slot": "sidebar-menu-sub",
         "data-sidebar": "menu-sub",
     });
@@ -788,7 +782,7 @@ pub fn SidebarMenuSubItem(
     children: Element,
 ) -> Element {
     let base = attributes!(li {
-        class: "dx-sidebar-menu-sub-item",
+        class: Styles::dx_sidebar_menu_sub_item,
         "data-slot": "sidebar-menu-sub-item",
         "data-sidebar": "menu-sub-item",
     });
@@ -825,7 +819,7 @@ pub fn SidebarMenuSubButton(
     children: Element,
 ) -> Element {
     let base = attributes!(a {
-        class: "dx-sidebar-menu-sub-button",
+        class: Styles::dx_sidebar_menu_sub_button,
         "data-slot": "sidebar-menu-sub-button",
         "data-sidebar": "menu-sub-button",
         "data-size": size.as_str(),

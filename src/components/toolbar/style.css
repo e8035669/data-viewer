@@ -10,8 +10,12 @@
     gap: .25rem;
 }
 
-.dx-toolbar[data-orientation="vertical"] {
-    flex-flow: column wrap;
+.dx-toolbar-demo {
+    display: flex;
+    max-width: 30rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
 }
 
 .dx-toolbar button {
@@ -45,10 +49,6 @@
     gap: 5px;
 }
 
-.dx-toolbar[data-orientation="vertical"] .dx-toolbar-group {
-    flex-direction: column;
-}
-
 .dx-toolbar-separator {
     width: 1px;
     height: 24px;
@@ -56,13 +56,12 @@
     background-color: var(--primary-color-6);
 }
 
-.dx-toolbar-separator[data-orientation="vertical"] {
-    width: 24px;
-    height: 1px;
-    margin: 5px 0;
+.dx-toolbar-content p {
+    padding: 0;
+    margin: 0;
 }
 
-.dx-toolbar-content p {
+.dx-toolbar-demo p {
     padding: 0;
     margin: 0;
 }

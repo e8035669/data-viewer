@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use crate::components::radio_group::{RadioGroup, RadioItem};
 use crate::models::{Project, Projects};
@@ -11,14 +11,10 @@ use dioxus_primitives::toast::{use_toast, ToastOptions};
 use crate::{
     components::{
         button::{Button, ButtonVariant},
-        card::{Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle},
-        dialog::{DialogContent, DialogDescription, DialogRoot, DialogTitle},
+        card::{Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle},
+        dialog::{Dialog, DialogDescription, DialogTitle},
         input::Input,
         label::Label,
-        select::{
-            Select, SelectGroup, SelectItemIndicator, SelectList, SelectOption, SelectTrigger,
-            SelectValue,
-        },
     },
     models::Endpoints,
     ui::page_header::PageHeader,
@@ -117,49 +113,47 @@ pub fn ProjectsViewOld() -> Element {
     });
 
     let new_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *new_info.is_open().read(),
             on_open_change: move |v| new_info.is_open().set(v),
-            DialogContent {
-                button {
-                    class: Styles::dx_dialog_close,
-                    r#type: "button",
-                    aria_label: "Close",
-                    tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
-                    onclick: move |_| new_info.is_open().set(false),
-                    "×"
-                }
-                DialogTitle { "Add Project" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        Label { html_for: "project_name", "Name" }
-                        Input {
-                            id: "project_name",
-                            oninput: move |e: FormEvent| new_info.name().set(e.value()),
-                        }
+            button {
+                class: Styles::dx_dialog_close,
+                r#type: "button",
+                aria_label: "Close",
+                tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
+                onclick: move |_| new_info.is_open().set(false),
+                "×"
+            }
+            DialogTitle { "Add Project" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    Label { html_for: "project_name", "Name" }
+                    Input {
+                        id: "project_name",
+                        oninput: move |e: FormEvent| new_info.name().set(e.value()),
+                    }
 
-                        Label { html_for: "project_key", "Project Key" }
-                        Input {
-                            id: "project_key",
-                            placeholder: "PK123456789",
-                            oninput: move |e: FormEvent| new_info.project_key().set(e.value()),
-                        }
+                    Label { html_for: "project_key", "Project Key" }
+                    Input {
+                        id: "project_key",
+                        placeholder: "PK123456789",
+                        oninput: move |e: FormEvent| new_info.project_key().set(e.value()),
+                    }
 
-                        Label { html_for: "endpoint_key", "Endpoint Key" }
-                        div { id: "endpoint_key",
-                            if endpoints().is_empty() {
-                                p { "Endpoint is empty, Add endpoint first." }
-                            } else {
-                                RadioGroup {
-                                    value: new_info.endpoint_key()(),
-                                    on_value_change: move |v: String| new_info.endpoint_key().set(v),
-                                    {endpoint_items}
-                                }
+                    Label { html_for: "endpoint_key", "Endpoint Key" }
+                    div { id: "endpoint_key",
+                        if endpoints().is_empty() {
+                            p { "Endpoint is empty, Add endpoint first." }
+                        } else {
+                            RadioGroup {
+                                value: new_info.endpoint_key()(),
+                                on_value_change: move |v: String| new_info.endpoint_key().set(v),
+                                {endpoint_items}
                             }
                         }
-
-                        Button { onclick: on_new_submit, "Submit" }
                     }
+
+                    Button { onclick: on_new_submit, "Submit" }
                 }
             }
         }
@@ -172,25 +166,23 @@ pub fn ProjectsViewOld() -> Element {
     };
 
     let delete_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *delete_ctx.is_open().read(),
             on_open_change: move |v| delete_ctx.is_open().set(v),
-            DialogContent {
-                DialogTitle { "Delete Confirm" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        "Delete endpoint {delete_ctx.target()}"
-                        div { class: "flex justify-end gap-4",
-                            Button {
-                                variant: ButtonVariant::Primary,
-                                onclick: move |_| delete_ctx.is_open().set(false),
-                                "NO"
-                            }
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+            DialogTitle { "Delete Confirm" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    "Delete endpoint {delete_ctx.target()}"
+                    div { class: "flex justify-end gap-4",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            onclick: move |_| delete_ctx.is_open().set(false),
+                            "NO"
+                        }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            onclick: on_delete_confirm,
+                            "Yes"
                         }
                     }
                 }
@@ -302,49 +294,47 @@ pub fn ProjectsView() -> Element {
     });
 
     let new_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *new_info.is_open().read(),
             on_open_change: move |v| new_info.is_open().set(v),
-            DialogContent {
-                button {
-                    class: Styles::dx_dialog_close,
-                    r#type: "button",
-                    aria_label: "Close",
-                    tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
-                    onclick: move |_| new_info.is_open().set(false),
-                    "×"
-                }
-                DialogTitle { "Add Project" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        Label { html_for: "project_name", "Name" }
-                        Input {
-                            id: "project_name",
-                            oninput: move |e: FormEvent| new_info.name().set(e.value()),
-                        }
+            button {
+                class: Styles::dx_dialog_close,
+                r#type: "button",
+                aria_label: "Close",
+                tabindex: if *new_info.is_open().read() { "0" } else { "-1" },
+                onclick: move |_| new_info.is_open().set(false),
+                "×"
+            }
+            DialogTitle { "Add Project" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    Label { html_for: "project_name", "Name" }
+                    Input {
+                        id: "project_name",
+                        oninput: move |e: FormEvent| new_info.name().set(e.value()),
+                    }
 
-                        Label { html_for: "project_key", "Project Key" }
-                        Input {
-                            id: "project_key",
-                            placeholder: "PK123456789",
-                            oninput: move |e: FormEvent| new_info.project_key().set(e.value()),
-                        }
+                    Label { html_for: "project_key", "Project Key" }
+                    Input {
+                        id: "project_key",
+                        placeholder: "PK123456789",
+                        oninput: move |e: FormEvent| new_info.project_key().set(e.value()),
+                    }
 
-                        Label { html_for: "endpoint_key", "Endpoint Key" }
-                        div { id: "endpoint_key",
-                            if endpoints().is_empty() {
-                                p { "Endpoint is empty, Add endpoint first." }
-                            } else {
-                                RadioGroup {
-                                    value: new_info.endpoint_key()(),
-                                    on_value_change: move |v: String| new_info.endpoint_key().set(v),
-                                    {endpoint_items}
-                                }
+                    Label { html_for: "endpoint_key", "Endpoint Key" }
+                    div { id: "endpoint_key",
+                        if endpoints().is_empty() {
+                            p { "Endpoint is empty, Add endpoint first." }
+                        } else {
+                            RadioGroup {
+                                value: new_info.endpoint_key()(),
+                                on_value_change: move |v: String| new_info.endpoint_key().set(v),
+                                {endpoint_items}
                             }
                         }
-
-                        Button { onclick: on_new_submit, "Submit" }
                     }
+
+                    Button { onclick: on_new_submit, "Submit" }
                 }
             }
         }
@@ -357,25 +347,23 @@ pub fn ProjectsView() -> Element {
     };
 
     let delete_dialog = rsx! {
-        DialogRoot {
+        Dialog {
             open: *delete_ctx.is_open().read(),
             on_open_change: move |v| delete_ctx.is_open().set(v),
-            DialogContent {
-                DialogTitle { "Delete Confirm" }
-                DialogDescription {
-                    div { class: "flex flex-col gap-4",
-                        "Delete endpoint {delete_ctx.target()}"
-                        div { class: "flex justify-end gap-4",
-                            Button {
-                                variant: ButtonVariant::Primary,
-                                onclick: move |_| delete_ctx.is_open().set(false),
-                                "NO"
-                            }
-                            Button {
-                                variant: ButtonVariant::Destructive,
-                                onclick: on_delete_confirm,
-                                "Yes"
-                            }
+            DialogTitle { "Delete Confirm" }
+            DialogDescription {
+                div { class: "flex flex-col gap-4",
+                    "Delete endpoint {delete_ctx.target()}"
+                    div { class: "flex justify-end gap-4",
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            onclick: move |_| delete_ctx.is_open().set(false),
+                            "NO"
+                        }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            onclick: on_delete_confirm,
+                            "Yes"
                         }
                     }
                 }
