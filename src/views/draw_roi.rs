@@ -1844,6 +1844,13 @@ pub fn DrawRoiPage() -> Element {
                 }
             }
 
+            input {
+                class: "relative w-full border-2 border-dashed rounded-lg p-6 flex flex-col items-center gap-2 cursor-pointer",
+                r#type: "file",
+                accept: "image/*",
+                oninput: on_file_input,
+            }
+
             div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
                 Input {
                     class: format!("{} {}", InputStyles::dx_input, "font-mono"),
