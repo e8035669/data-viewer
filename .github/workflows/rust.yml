@@ -133,7 +133,7 @@ jobs:
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
         run: |
-          cargo binstall dioxus-cli -y --force
+          cargo binstall dioxus-cli@0.7.9 -y --force
           dx bundle --release --platform android --package-types apk --target ${{ matrix.target }}
       - name: Clean up keystore
         if: always()
