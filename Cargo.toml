@@ -22,7 +22,8 @@ dioxus = { version = "0.7.8", features = ["router"] }
 futures-util = "0.3"
 dioxus-free-icons = { version = "0.10.0", features = ["font-awesome-regular", "font-awesome-solid"] }
 dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version = "0.0.1", default-features = false }
-dioxus-sdk-storage = "0.7.0"
+# dioxus-sdk-storage = "0.7.0"
+dioxus-sdk-storage = { version = "0.7.0", git = "https://github.com/DioxusLabs/sdk", branch = "main" }
 euclid = "0.22.14"
 indexmap = "2.14.0"
 reqwest = { version = "0.13.4", features = ["json", "query"] }
