@@ -23,10 +23,13 @@ futures-util = "0.3"
 dioxus-free-icons = { version = "0.10.0", features = ["font-awesome-regular", "font-awesome-solid"] }
 dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version = "0.0.1", default-features = false }
 # dioxus-sdk-storage = "0.7.0"
+# Android target need latest version
 dioxus-sdk-storage = { version = "0.7.0", git = "https://github.com/DioxusLabs/sdk", branch = "main" }
 euclid = "0.22.14"
 indexmap = "2.14.0"
-reqwest = { version = "0.13.4", features = ["json", "query"] }
+# Android target cannot update to 0.13
+# https://github.com/seanmonstar/reqwest/issues/2966
+reqwest = { version = "0.12.28", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 strum = { version = "0.28.0", features = ["derive"] }
