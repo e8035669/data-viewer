@@ -20,7 +20,11 @@ script = []
 # serve: [dev-server] only
 script = []
 
+[permissions]
+photos = { precision = "read", description = "Import photo to draw ROI" }
 
 [bundle]
 identifier = "com.dataviewer"
 publisher = "jeff"
+
+
