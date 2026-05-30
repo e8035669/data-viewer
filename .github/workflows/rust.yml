@@ -33,8 +33,9 @@ jobs:
         uses: cargo-bins/cargo-binstall@main
       - name: Build
         run: |
-          cargo binstall dioxus-cli -y --force
+          cargo binstall dioxus-cli@0.7.9 -y --force
           # cargo install dioxus-cli
+          curl -sSL https://dioxus.dev/install.sh | bash -s -- v0.7.9
           dx bundle --release --desktop --package-types "appimage"
       - name: Bundle WebKit helper processes into AppImage
         run: |
