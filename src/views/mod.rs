@@ -30,7 +30,7 @@ mod global;
 pub use global::Providers;
 
 mod monitors;
-pub use monitors::{ActiveMonitorView, MonitorProjectSelectPage, MonitorProjectPage};
+pub use monitors::{ActiveMonitorView, MonitorProjectPage, MonitorProjectSelectPage};
 
 mod draw_roi;
 pub use draw_roi::DrawRoiPage;
@@ -42,3 +42,9 @@ mod sensor_v2;
 pub use sensor_v2::{
     DeviceAttr, DeviceSensors, ProjectDevices, ProjectLayout, SensorAttr, SensorHistory,
 };
+
+mod darkmode;
+pub use darkmode::ThemeProvider;
+
+mod preference;
+pub use preference::PreferencePage;

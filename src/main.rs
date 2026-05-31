@@ -6,7 +6,7 @@ use views::{
     ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DevicePage3Old, DeviceSensors, DrawRoiPage,
     EndpointView, Home, MonitorProjectPage, MonitorProjectSelectPage, Navbar, ProjectDevices,
     ProjectImportPage, ProjectLayout, ProjectsView, ProjectsViewOld, SensorAttr, SensorHistory,
-    SensorPanel, Storage, Storage2, TestRule1,
+    SensorPanel, PreferencePage, Storage, Storage2, TestRule1,
 };
 
 use crate::views::Providers;
@@ -86,6 +86,9 @@ enum Route {
         #[route("/projects")]
         ProjectsView {},
 
+        #[route("/preference")]
+        PreferencePage {},
+
         #[nest("/projects/:project_name")]
         #[layout(ProjectLayout)]
             #[route("/")]
@@ -103,7 +106,6 @@ enum Route {
 
                 #[route("/history")]
                 SensorHistory { project_name: String, device_id: String, sensor_id: String },
-
 }
 
 // We can import assets in dioxus with the `asset!` macro. This macro takes a path to an asset relative to the crate root.
@@ -113,6 +115,7 @@ const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const COMPONENT_CSS: Asset = asset!("/assets/dx-components-theme.css");
+const DARKMODE_JS: Asset = asset!("/assets/darkmode.js");
 
 fn main() {
     // The `launch` function is the main entry point for a dioxus app. It takes a component and renders it with the platform feature
@@ -136,6 +139,7 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: MAIN_CSS }
         document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         document::Link { rel: "stylesheet", href: COMPONENT_CSS }
+        script { src: DARKMODE_JS }
 
         // The router component renders the route enum we defined above. It will handle synchronization of the URL and render
         // the layouts and components for the active route.

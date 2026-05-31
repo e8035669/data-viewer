@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::persistence::{use_auth_infos_persistent, use_endpoints_persistent, use_project_persistence};
+use crate::{
+    persistence::{use_auth_infos_persistent, use_endpoints_persistent, use_project_persistence},
+    views::ThemeProvider,
+};
 
 #[derive(Clone, Copy)]
 pub struct HeaderContext {
@@ -28,6 +31,8 @@ pub fn Providers(children: Element) -> Element {
 
     let title = use_signal(|| "Title".to_string());
     use_context_provider(|| HeaderContext { title });
+
+    use_context_provider(|| ThemeProvider::new());
 
     children
 }
