@@ -2,7 +2,9 @@ use anyhow;
 use dioxus::{logger::tracing, prelude::*};
 use std::{fmt, str::FromStr};
 
+#[derive(Default)]
 pub enum Theme {
+    #[default]
     Auto,
     Light,
     Dark,
