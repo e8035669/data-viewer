@@ -501,14 +501,14 @@ impl DrawContext {
     }
 
     fn close_current_roi(&mut self) {
-        if self.current_points.len() > 2 {
+        if self.current_points.len() >= 2 {
             // 閉合目前多邊形並新增至已完成清單
             let completed_roi = self.current_points.clone();
             self.insert_new_roi(completed_roi);
             self.current_points.clear();
             tracing::info!("已閉合多邊形，共有 ROI 數：{}", self.drawed_rois.len());
         } else {
-            tracing::info!("無法閉合多邊形 - 需要至少 3 個點");
+            tracing::info!("無法閉合多邊形 - 需要至少 2 個點");
         }
     }
 
@@ -1467,11 +1467,11 @@ pub fn DrawRoiPage() -> Element {
             let mut draw_ctx = draw_roi_ctx.draw_ctx;
             let mut draw_ctx = draw_ctx.write();
             for roi in imported_rois {
-                if roi.len() >= 3 {
+                if roi.len() >= 2 {
                     draw_ctx.insert_new_roi(roi);
                     imported_count += 1;
                 } else {
-                    tracing::warn!("略過無效 ROI：點數少於 3");
+                    tracing::warn!("略過無效 ROI：點數少於 2");
                     skipped_count += 1;
                 }
             }
