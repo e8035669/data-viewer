@@ -1839,6 +1839,10 @@ pub fn SensorAttr(
                 }
             }
             CardContent {
+                if attributes().is_empty() {
+                    p { "No attributes" }
+                }
+
                 for (i , attr) in attributes().iter().enumerate() {
                     div { class: "flex gap-4 mb-8",
                         div { class: "flex flex-1 gap-4 flex-wrap",

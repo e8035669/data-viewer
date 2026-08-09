@@ -3,10 +3,10 @@
 use dioxus::prelude::*;
 
 use views::{
-    ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DevicePage3Old, DeviceSensors, DrawRoiPage,
+    ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DeviceSensors, DrawRoiPage,
     EndpointView, Home, MonitorProjectPage, MonitorProjectSelectPage, Navbar, ProjectDevices,
-    ProjectImportPage, ProjectLayout, ProjectsView, ProjectsViewOld, SensorAttr, SensorHistory,
-    SensorPanel, PreferencePage, Storage, Storage2, TestRule1,
+    ProjectImportPage, ProjectLayout, ProjectsView, SensorAttr, SensorHistory,
+    PreferencePage, Storage, Storage2, TestRule1,
 };
 
 use crate::views::Providers;
@@ -44,9 +44,6 @@ enum Route {
         // an `id` prop of type `i32`.
         Blog { id: i32 },
 
-        #[route("/sensor")]
-        SensorPanel {},
-
         #[route("/endpoints")]
         EndpointView {},
 
@@ -55,12 +52,6 @@ enum Route {
 
         #[route("/storage2")]
         Storage2 {},
-
-        #[route("/projects_old")]
-        ProjectsViewOld {},
-
-        #[route("/projects_old/:project_name")]
-        DevicePage3Old {project_name: String},
 
         #[route("/monitorall")]
         ActiveMonitorView {},

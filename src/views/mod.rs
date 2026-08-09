@@ -18,13 +18,13 @@ mod navbar;
 pub use navbar::Navbar;
 
 mod sensor;
-pub use sensor::{DevicePage3Old, SensorPanel, TestRule1};
+pub use sensor::TestRule1;
 
 mod endpoints;
 pub use endpoints::{EndpointView, Storage, Storage2};
 
 mod projects;
-pub use projects::{ProjectsView, ProjectsViewOld};
+pub use projects::ProjectsView;
 
 mod global;
 pub use global::Providers;

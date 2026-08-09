@@ -133,11 +133,6 @@ pub fn Navbar() -> Element {
                                     "Blog"
                                 }
                                 SidebarLink {
-                                    to: Route::SensorPanel {},
-                                    icon: fa_solid_icons::FaHouse,
-                                    "Sensor"
-                                }
-                                SidebarLink {
                                     to: Route::Storage {},
                                     icon: fa_solid_icons::FaLink,
                                     "Storage"
@@ -152,12 +147,6 @@ pub fn Navbar() -> Element {
                                     to: Route::TestRule1 {},
                                     icon: fa_solid_icons::FaLink,
                                     "TestRule1"
-                                }
-
-                                SidebarLink {
-                                    to: Route::ProjectsViewOld {},
-                                    icon: fa_solid_icons::FaCirclePlus,
-                                    "Projects (Old)"
                                 }
                             }
                         }
