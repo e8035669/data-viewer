@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::{
@@ -247,6 +247,8 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
         }
     };
 
+    let mut import_dialog_open = use_signal(|| false);
+
     let on_export_settings = move |_| {
         let data = project_meta();
         let project_key = project().project_key.clone();
@@ -280,6 +282,12 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
         PageHeader { title: "Devices",
             Button {
                 variant: ButtonVariant::Ghost,
+                onclick: move |_| import_dialog_open.set(true),
+                Icon { icon: fa_solid_icons::FaFileImport }
+                "匯入設定"
+            }
+            Button {
+                variant: ButtonVariant::Ghost,
                 onclick: on_export_settings,
                 Icon { icon: fa_solid_icons::FaFileExport }
                 "匯出設定"
@@ -294,6 +302,13 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
         }
         {dialog}
         {delete_dialog}
+        ImportSettingsDialog {
+            open: import_dialog_open,
+            project,
+            endpoint,
+            project_meta,
+            project_resource,
+        }
         div { class: "grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start",
             if project_meta().is_empty() {
                 p { "No device, Add new one" }
@@ -417,6 +432,598 @@ pub fn DeviceCard(
                     "data-style": "ghost",
                     "Open"
                     Icon { icon: fa_solid_icons::FaArrowRight }
+                }
+            }
+        }
+    }
+}
+
+// ─── Import Settings (upload file → diff against current meta → apply) ──────
+
+#[derive(Clone, Copy, PartialEq, Default)]
+enum ImportStep {
+    #[default]
+    Upload,
+    Preview,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum ChangeKind {
+    Create,
+    Update,
+    Delete,
+}
+
+impl ChangeKind {
+    fn label_and_class(&self) -> (&'static str, &'static str) {
+        match self {
+            ChangeKind::Create => (
+                "新增",
+                "text-green-600 dark:text-green-400 border-green-600 dark:border-green-400",
+            ),
+            ChangeKind::Update => (
+                "更新",
+                "text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400",
+            ),
+            ChangeKind::Delete => (
+                "刪除",
+                "text-red-600 dark:text-red-400 border-red-600 dark:border-red-400",
+            ),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
+struct SensorDiff {
+    kind: ChangeKind,
+    id: String,
+    before: Option<Sensor>,
+    after: Option<Sensor>,
+    /// Uploaded sensor has a blank id, which the API does not accept on create.
+    invalid: bool,
+}
+
+#[derive(Clone, PartialEq)]
+struct DeviceDiff {
+    kind: ChangeKind,
+    id: String,
+    before: Option<Device>,
+    after: Option<Device>,
+    sensor_diffs: Vec<SensorDiff>,
+}
+
+fn device_without_sensors(d: &Device) -> Device {
+    Device {
+        sensors: None,
+        ..d.clone()
+    }
+}
+
+fn device_changed_fields(before: &Device, after: &Device) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    if before.name != after.name {
+        fields.push("名稱");
+    }
+    if before.desc != after.desc {
+        fields.push("描述");
+    }
+    if before.kind != after.kind {
+        fields.push("類型");
+    }
+    if before.uri != after.uri {
+        fields.push("URI");
+    }
+    if before.lat != after.lat || before.lon != after.lon {
+        fields.push("經緯度");
+    }
+    if before.attributes != after.attributes {
+        fields.push("屬性");
+    }
+    fields
+}
+
+fn sensor_changed_fields(before: &Sensor, after: &Sensor) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    if before.name != after.name {
+        fields.push("名稱");
+    }
+    if before.desc != after.desc {
+        fields.push("描述");
+    }
+    if before.kind != after.kind {
+        fields.push("類型");
+    }
+    if before.uri != after.uri {
+        fields.push("URI");
+    }
+    if before.formula != after.formula {
+        fields.push("公式");
+    }
+    if before.attributes != after.attributes {
+        fields.push("屬性");
+    }
+    fields
+}
+
+fn diff_sensors(current: &[Sensor], uploaded: &[Sensor]) -> Vec<SensorDiff> {
+    let current_by_id: HashMap<&str, &Sensor> = current
+        .iter()
+        .filter(|s| !s.id.is_empty())
+        .map(|s| (s.id.as_str(), s))
+        .collect();
+    let mut uploaded_ids: HashSet<&str> = HashSet::new();
+    let mut diffs = Vec::new();
+
+    for s in uploaded {
+        if s.id.is_empty() {
+            diffs.push(SensorDiff {
+                kind: ChangeKind::Create,
+                id: String::new(),
+                before: None,
+                after: Some(s.clone()),
+                invalid: true,
+            });
+            continue;
+        }
+        uploaded_ids.insert(s.id.as_str());
+        match current_by_id.get(s.id.as_str()) {
+            None => diffs.push(SensorDiff {
+                kind: ChangeKind::Create,
+                id: s.id.clone(),
+                before: None,
+                after: Some(s.clone()),
+                invalid: false,
+            }),
+            Some(cur) => {
+                if *cur != s {
+                    diffs.push(SensorDiff {
+                        kind: ChangeKind::Update,
+                        id: s.id.clone(),
+                        before: Some((*cur).clone()),
+                        after: Some(s.clone()),
+                        invalid: false,
+                    });
+                }
+            }
+        }
+    }
+
+    for s in current {
+        if !s.id.is_empty() && !uploaded_ids.contains(s.id.as_str()) {
+            diffs.push(SensorDiff {
+                kind: ChangeKind::Delete,
+                id: s.id.clone(),
+                before: Some(s.clone()),
+                after: None,
+                invalid: false,
+            });
+        }
+    }
+
+    diffs
+}
+
+/// Diffs `uploaded` metadata against `current` metadata. Devices/sensors are matched by id:
+/// a blank or unknown id means create, a known id means check-for-update, and a current id
+/// missing from `uploaded` means delete.
+fn compute_import_plan(current: &[Device], uploaded: &[Device]) -> Vec<DeviceDiff> {
+    let current_by_id: HashMap<&str, &Device> = current
+        .iter()
+        .filter(|d| !d.id.is_empty())
+        .map(|d| (d.id.as_str(), d))
+        .collect();
+    let mut uploaded_ids: HashSet<&str> = HashSet::new();
+    let mut plan = Vec::new();
+
+    for d in uploaded {
+        let uploaded_sensors = d.sensors.clone().unwrap_or_default();
+
+        if d.id.is_empty() || !current_by_id.contains_key(d.id.as_str()) {
+            if !d.id.is_empty() {
+                uploaded_ids.insert(d.id.as_str());
+            }
+            plan.push(DeviceDiff {
+                kind: ChangeKind::Create,
+                id: String::new(),
+                before: None,
+                after: Some(d.clone()),
+                sensor_diffs: diff_sensors(&[], &uploaded_sensors),
+            });
+            continue;
+        }
+
+        uploaded_ids.insert(d.id.as_str());
+        let cur = current_by_id[d.id.as_str()];
+        let cur_sensors = cur.sensors.clone().unwrap_or_default();
+        let sensor_diffs = diff_sensors(&cur_sensors, &uploaded_sensors);
+        let device_changed = device_without_sensors(cur) != device_without_sensors(d);
+
+        if device_changed || !sensor_diffs.is_empty() {
+            plan.push(DeviceDiff {
+                kind: ChangeKind::Update,
+                id: d.id.clone(),
+                before: Some(cur.clone()),
+                after: Some(d.clone()),
+                sensor_diffs,
+            });
+        }
+    }
+
+    for d in current {
+        if !d.id.is_empty() && !uploaded_ids.contains(d.id.as_str()) {
+            plan.push(DeviceDiff {
+                kind: ChangeKind::Delete,
+                id: d.id.clone(),
+                before: Some(d.clone()),
+                after: None,
+                sensor_diffs: Vec::new(),
+            });
+        }
+    }
+
+    plan
+}
+
+/// Applies a computed import plan by calling the single-purpose `ApiHelper` endpoints in order.
+/// Returns a list of human-readable error messages for any operation that failed; the rest
+/// still get applied so a partial failure doesn't block unrelated changes.
+async fn execute_import_plan(
+    client: &Client,
+    endpoint: &Endpoint,
+    project_key: &str,
+    plan: &[DeviceDiff],
+) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    for d in plan {
+        match d.kind {
+            ChangeKind::Create => {
+                let Some(after) = &d.after else { continue };
+                let edit_device = EditDevice {
+                    name: after.name.clone(),
+                    desc: after.desc.clone(),
+                    kind: after.kind.clone(),
+                    uri: after.uri.clone(),
+                    lat: after.lat,
+                    lon: after.lon,
+                    attributes: after.attributes.clone(),
+                };
+                match ApiHelper::create_device(client, endpoint, project_key, &edit_device).await {
+                    Ok(new_id) => {
+                        for sd in &d.sensor_diffs {
+                            if sd.invalid {
+                                errors.push(format!(
+                                    "新增裝置「{}」的感測器 ID 不可為空白，已略過",
+                                    after.name
+                                ));
+                                continue;
+                            }
+                            if let Some(s) = &sd.after {
+                                if let Err(e) =
+                                    ApiHelper::create_sensor(client, endpoint, project_key, &new_id, s)
+                                        .await
+                                {
+                                    errors.push(format!(
+                                        "新增裝置「{}」的感測器「{}」失敗: {e}",
+                                        after.name, s.id
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => errors.push(format!("新增裝置「{}」失敗: {e}", after.name)),
+                }
+            }
+            ChangeKind::Update => {
+                let Some(after) = &d.after else { continue };
+                let device_id = d.id.clone();
+
+                let device_changed = d
+                    .before
+                    .as_ref()
+                    .map(|b| device_without_sensors(b) != device_without_sensors(after))
+                    .unwrap_or(true);
+                if device_changed {
+                    let edit_device = EditDevice {
+                        name: after.name.clone(),
+                        desc: after.desc.clone(),
+                        kind: after.kind.clone(),
+                        uri: after.uri.clone(),
+                        lat: after.lat,
+                        lon: after.lon,
+                        attributes: after.attributes.clone(),
+                    };
+                    if let Err(e) =
+                        ApiHelper::update_device(client, endpoint, project_key, &device_id, &edit_device)
+                            .await
+                    {
+                        errors.push(format!("更新裝置「{}」失敗: {e}", after.name));
+                    }
+                }
+
+                for sd in &d.sensor_diffs {
+                    if sd.invalid {
+                        errors.push("感測器 ID 不可為空白，已略過".to_string());
+                        continue;
+                    }
+                    match sd.kind {
+                        ChangeKind::Create => {
+                            if let Some(s) = &sd.after {
+                                if let Err(e) = ApiHelper::create_sensor(
+                                    client,
+                                    endpoint,
+                                    project_key,
+                                    &device_id,
+                                    s,
+                                )
+                                .await
+                                {
+                                    errors.push(format!("新增感測器「{}」失敗: {e}", s.id));
+                                }
+                            }
+                        }
+                        ChangeKind::Update => {
+                            if let Some(s) = &sd.after {
+                                let edit_sensor = EditSensor {
+                                    name: s.name.clone(),
+                                    desc: s.desc.clone(),
+                                    kind: s.kind,
+                                    uri: s.uri.clone(),
+                                    formula: s.formula.clone(),
+                                    attributes: s.attributes.clone(),
+                                };
+                                if let Err(e) = ApiHelper::update_sensor(
+                                    client,
+                                    endpoint,
+                                    project_key,
+                                    &device_id,
+                                    &sd.id,
+                                    &edit_sensor,
+                                )
+                                .await
+                                {
+                                    errors.push(format!("更新感測器「{}」失敗: {e}", sd.id));
+                                }
+                            }
+                        }
+                        ChangeKind::Delete => {
+                            if let Err(e) = ApiHelper::delete_sensor(
+                                client,
+                                endpoint,
+                                project_key,
+                                &device_id,
+                                &sd.id,
+                            )
+                            .await
+                            {
+                                errors.push(format!("刪除感測器「{}」失敗: {e}", sd.id));
+                            }
+                        }
+                    }
+                }
+            }
+            ChangeKind::Delete => {
+                if let Err(e) = ApiHelper::delete_device(client, endpoint, project_key, &d.id).await
+                {
+                    errors.push(format!("刪除裝置「{}」失敗: {e}", d.id));
+                }
+            }
+        }
+    }
+
+    errors
+}
+
+#[component]
+fn ImportSettingsDialog(
+    mut open: Signal<bool>,
+    project: ReadSignal<Project>,
+    endpoint: ReadSignal<Endpoint>,
+    project_meta: ReadSignal<Vec<Device>>,
+    mut project_resource: Resource<Result<Vec<Device>>>,
+) -> Element {
+    let mut step = use_signal(ImportStep::default);
+    let mut parse_error = use_signal(String::new);
+    let mut plan = use_signal(Vec::<DeviceDiff>::new);
+    let mut is_executing = use_signal(|| false);
+    let has_invalid =
+        use_memo(move || plan().iter().any(|d| d.sensor_diffs.iter().any(|sd| sd.invalid)));
+
+    let mut close_and_reset = move |v: bool| {
+        open.set(v);
+        if !v {
+            step.set(ImportStep::Upload);
+            parse_error.set(String::new());
+            plan.set(Vec::new());
+        }
+    };
+
+    let on_file_input = move |e: FormEvent| async move {
+        parse_error.set(String::new());
+        let files = e.files().clone();
+        let Some(file) = files.get(0) else {
+            return;
+        };
+        let Ok(bytes) = file.read_bytes().await else {
+            parse_error.set("無法讀取檔案".to_string());
+            return;
+        };
+        let Ok(text) = String::from_utf8(bytes.to_vec()) else {
+            parse_error.set("檔案編碼錯誤".to_string());
+            return;
+        };
+        match serde_json::from_str::<Vec<Device>>(&text) {
+            Ok(devices) => {
+                let computed_plan = compute_import_plan(&project_meta(), &devices);
+                plan.set(computed_plan);
+                step.set(ImportStep::Preview);
+            }
+            Err(e) => parse_error.set(format!("JSON 解析失敗: {e}")),
+        }
+    };
+
+    let on_confirm = move |_| async move {
+        is_executing.set(true);
+        let toast_api = use_toast();
+        let client = Client::new();
+        let ep = endpoint();
+        let pk = project().project_key;
+        let current_plan = plan();
+        let errors = execute_import_plan(&client, &ep, &pk, &current_plan).await;
+        is_executing.set(false);
+
+        if errors.is_empty() {
+            toast_api.success(
+                "匯入完成".to_string(),
+                ToastOptions::new().duration(Duration::from_secs(5)),
+            );
+        } else {
+            toast_api.error(
+                format!("匯入完成，但有 {} 項失敗", errors.len()),
+                ToastOptions::new()
+                    .description(errors.join("; "))
+                    .duration(Duration::from_secs(15)),
+            );
+        }
+        project_resource.restart();
+        close_and_reset(false);
+    };
+
+    rsx! {
+        Dialog {
+            open: open(),
+            on_open_change: close_and_reset,
+            class: "max-w-4xl! max-h-[85vh]! overflow-hidden!",
+            DialogTitle { "匯入專案設定" }
+            match step() {
+                ImportStep::Upload => rsx! {
+                    DialogDescription {
+                        div { class: "flex flex-col gap-4 text-left",
+                            p { "請選擇先前匯出的設定檔（JSON），系統會比對目前的裝置與感測器並列出異動清單。" }
+                            div { class: "relative w-full border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-lg p-6 flex flex-col items-center gap-2 cursor-pointer",
+                                div { class: "text-3xl pointer-events-none",
+                                    Icon { icon: fa_solid_icons::FaCloudArrowUp }
+                                }
+                                p { class: "text-sm text-center pointer-events-none", "點擊選取檔案" }
+                                input {
+                                    class: "absolute inset-0 w-full h-full opacity-0 cursor-pointer",
+                                    r#type: "file",
+                                    accept: "application/json",
+                                    oninput: on_file_input,
+                                }
+                            }
+                            if !parse_error().is_empty() {
+                                p { class: "text-red-600 dark:text-red-400 text-sm", "{parse_error()}" }
+                            }
+                        }
+                    }
+                },
+                ImportStep::Preview => rsx! {
+                    div { class: "flex flex-col gap-3 text-left flex-1 min-h-0 overflow-y-auto",
+                        if plan().is_empty() {
+                            p { "沒有偵測到任何異動" }
+                        }
+                        if has_invalid() {
+                            p { class: "text-red-600 dark:text-red-400 text-sm",
+                                "有感測器 ID 為空白，請修正檔案後重新上傳"
+                            }
+                        }
+                        for (i , d) in plan().iter().enumerate() {
+                            DeviceDiffCard { key: "{i}-{d.id}", diff: d.clone() }
+                        }
+                    }
+                    div { class: "flex justify-end gap-4 mt-4 shrink-0",
+                        Button {
+                            variant: ButtonVariant::Secondary,
+                            disabled: is_executing(),
+                            onclick: move |_| step.set(ImportStep::Upload),
+                            "上一步"
+                        }
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            disabled: is_executing() || plan().is_empty() || has_invalid(),
+                            onclick: on_confirm,
+                            if is_executing() { "執行中..." } else { "確認匯入" }
+                        }
+                    }
+                },
+            }
+        }
+    }
+}
+
+#[component]
+fn DeviceDiffCard(diff: DeviceDiff) -> Element {
+    let (label, class) = diff.kind.label_and_class();
+    let name = diff
+        .after
+        .as_ref()
+        .or(diff.before.as_ref())
+        .map(|d| d.name.clone())
+        .unwrap_or_default();
+    let id_display = if diff.id.is_empty() {
+        "（新裝置，ID 由系統配發）".to_string()
+    } else {
+        format!("ID: {}", diff.id)
+    };
+    let changed_fields = match (&diff.before, &diff.after) {
+        (Some(b), Some(a)) => device_changed_fields(b, a),
+        _ => Vec::new(),
+    };
+
+    rsx! {
+        div { class: "border border-slate-200 dark:border-zinc-800 rounded-lg p-3",
+            div { class: "flex items-center gap-2 flex-wrap",
+                span { class: "px-2 py-0.5 border rounded text-xs shrink-0 {class}", "{label}" }
+                span { class: "font-semibold", "{name}" }
+                span { class: "text-xs text-slate-500 dark:text-slate-400", "{id_display}" }
+            }
+            if !changed_fields.is_empty() {
+                p { class: "text-xs text-slate-500 dark:text-slate-400 mt-1",
+                    "變更欄位: {changed_fields.join(\", \")}"
+                }
+            }
+            if !diff.sensor_diffs.is_empty() {
+                div { class: "flex flex-col gap-1 mt-2 pl-4 border-l-2 border-slate-200 dark:border-zinc-800",
+                    for (i , sd) in diff.sensor_diffs.iter().enumerate() {
+                        SensorDiffRow { key: "{i}-{sd.id}", diff: sd.clone() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn SensorDiffRow(diff: SensorDiff) -> Element {
+    let (label, class) = diff.kind.label_and_class();
+    let name = diff
+        .after
+        .as_ref()
+        .or(diff.before.as_ref())
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+    let id_display = if diff.id.is_empty() {
+        "新感測器".to_string()
+    } else {
+        diff.id.clone()
+    };
+    let changed_fields = match (&diff.before, &diff.after) {
+        (Some(b), Some(a)) => sensor_changed_fields(b, a),
+        _ => Vec::new(),
+    };
+
+    rsx! {
+        div { class: "flex items-center gap-2 text-sm flex-wrap",
+            span { class: "px-1.5 py-0.5 border rounded text-xs shrink-0 {class}", "{label}" }
+            span { "{id_display}" }
+            span { class: "text-slate-500 dark:text-slate-400", "({name})" }
+            if !changed_fields.is_empty() {
+                span { class: "text-xs text-slate-400", "變更: {changed_fields.join(\", \")}" }
+            }
+            if diff.invalid {
+                span { class: "px-1.5 py-0.5 border rounded text-xs shrink-0 text-red-600 dark:text-red-400 border-red-600 dark:border-red-400",
+                    "ID 不可為空白"
                 }
             }
         }
@@ -564,6 +1171,15 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
 
     let on_create_sensor = move |_| async move {
         let toast_api = use_toast();
+        if new_sensor.id()().trim().is_empty() {
+            toast_api.error(
+                "建立失敗".to_string(),
+                ToastOptions::new()
+                    .description("感測器 ID 不可為空白")
+                    .duration(Duration::from_secs(10)),
+            );
+            return;
+        }
         new_sensor_open.set(false);
         let client = Client::new();
         let ep = endpoint();
@@ -603,9 +1219,10 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
             on_open_change: move |v| new_sensor_open.set(v),
             DialogTitle { "New Sensor" }
             div { class: "grid grid-cols-1 gap-4",
-                Label { html_for: "new_sensor_id", "ID" }
+                Label { html_for: "new_sensor_id", "ID *" }
                 Input {
                     id: "new_sensor_id",
+                    required: true,
                     value: new_sensor.id(),
                     oninput: move |e: FormEvent| new_sensor.id().set(e.value()),
                 }
