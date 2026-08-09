@@ -1,45 +1,17 @@
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::time::Duration;
-
-use crate::components::button::{Button, ButtonVariant};
+use crate::api::ApiHelper;
 use crate::components::card::{
-    Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
+    Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle,
 };
-use crate::components::dialog::{Dialog, DialogDescription, DialogTitle};
-use crate::components::dropdown_menu::{
-    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-};
-use crate::components::input::Input;
-use crate::components::label::Label;
-use crate::components::radio_group::{RadioGroup, RadioItem};
 use crate::components::select::{Select, SelectGroup, SelectOption};
-use crate::components::switch::Switch;
-use crate::components::textarea::Textarea;
-use crate::views::global::HeaderContext;
-use anyhow::{anyhow, Error, Result};
-use async_std::task::sleep;
-use base64::prelude::*;
-use dioxus::logger::tracing;
-use dioxus::prelude::*;
-use dioxus_free_icons::icons::fa_solid_icons;
-use dioxus_free_icons::Icon;
-use dioxus_primitives::toast::{use_toast, ToastOptions};
-use reqwest::{Client, Url};
-use strum::IntoEnumIterator;
-use time::format_description::well_known::Iso8601;
-use time::macros::{datetime, format_description, offset};
-use time::{Date, OffsetDateTime};
 
-use crate::models::{
-    Action, ActionType, ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute,
-    Device, EditDevice, EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project,
-    Projects, RawData, Rule1, Sensor, SensorStoreExt, SensorType, SensorWithData,
-};
+use crate::views::global::HeaderContext;
+use anyhow::Result;
+use dioxus::prelude::*;
+
+use crate::models::{Action, ActionType, Endpoint, Endpoints, Project, Projects, Rule1};
 
 #[css_module("/src/components/input/style.css")]
 struct InputStyles;
-
 
 #[component]
 pub fn TestRule1() -> Element {
@@ -99,15 +71,7 @@ pub fn TestRule1() -> Element {
 fn Rule1View(project: ReadSignal<Project>, endpoint: ReadSignal<Endpoint>) -> Element {
     let rules_res: Resource<Result<Vec<Rule1>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        let url = endpoint().all_expression();
-        let ret = client
-            .get(url)
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await?
-            .json::<Vec<Rule1>>()
-            .await?;
-        Ok(ret)
+        ApiHelper::fetch_rules(&client, &endpoint(), &project().project_key).await
     });
 
     let content = if let Some(response) = &*rules_res.read() {
@@ -181,7 +145,7 @@ fn RuleCard(rule: Rule1) -> Element {
                         span { class: "px-2 py-1 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200",
                             "{rule.mode:?}"
                         }
-                    
+
                     }
                 }
             }

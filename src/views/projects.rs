@@ -11,7 +11,7 @@ use dioxus_primitives::toast::{use_toast, ToastOptions};
 use crate::{
     components::{
         button::{Button, ButtonVariant},
-        card::{Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle},
+        card::{Card, CardAction, CardFooter, CardHeader, CardTitle},
         dialog::{Dialog, DialogDescription, DialogTitle},
         input::Input,
         label::Label,
@@ -55,7 +55,6 @@ impl<Lens> Store<DeleteCtx, Lens> {
         self.is_open().set(true);
     }
 }
-
 
 // Projects type is provided by `crate::models::Projects`.
 

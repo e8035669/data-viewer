@@ -11,6 +11,8 @@ use views::{
 
 use crate::views::Providers;
 
+/// Centralized HTTP/API helpers that talk to an `Endpoint`.
+mod api;
 /// Define a components module that contains all shared components for our app.
 mod components;
 /// Centralized models (API types) module.

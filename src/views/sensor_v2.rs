@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::time::Duration;
 
 use crate::{
+    api::{ApiHelper, SensorRawDataQuery},
     components::{
         button::{Button, ButtonVariant},
         card::{Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle},
@@ -17,8 +17,8 @@ use crate::{
     },
     models::{
         ActiveDevice, ActiveInfo, ActiveNotify, ActiveNotifySetting, Attribute, Device, EditDevice,
-        EditSensor, Endpoint, EndpointTrait, Endpoints, GetRawData, Project, Projects, RawData,
-        Sensor, SensorStoreExt, SensorType, SensorWithData,
+        EditSensor, Endpoint, Endpoints, GetRawData, Project, Projects, RawData, Sensor,
+        SensorStoreExt, SensorType, SensorWithData,
     },
     ui::{
         breadcrumb::{Breadcrumb, BreadcrumbItem},
@@ -29,12 +29,10 @@ use crate::{
 };
 use anyhow::{anyhow, Error, Result};
 use async_std::task::sleep;
-use base64::prelude::*;
-use dioxus::logger::tracing;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::toast::{use_toast, ToastOptions};
-use reqwest::{Client, Url};
+use reqwest::Client;
 use strum::IntoEnumIterator;
 use time::format_description::well_known::Iso8601;
 use time::macros::{datetime, format_description, offset};
@@ -42,97 +40,6 @@ use time::{Date, OffsetDateTime};
 
 #[css_module("/src/components/input/style.css")]
 struct InputStyles;
-
-struct ApiHelper;
-
-impl ApiHelper {
-    async fn req_project_meta(
-        client: &Client,
-        endpoint: &Endpoint,
-        project_key: &str,
-    ) -> Result<Vec<Device>> {
-        let url = endpoint.metadata();
-        let mut data = client
-            .get(url)
-            .header("CK", project_key)
-            .send()
-            .await?
-            .json::<Vec<Device>>()
-            .await?;
-        data.sort_by_key(|v| v.id.parse::<u64>().unwrap_or_default());
-        Ok(data)
-    }
-
-    async fn create_device(
-        client: &Client,
-        endpoint: &Endpoint,
-        project_key: &str,
-        new_device: &EditDevice,
-    ) -> Result<String> {
-        let url = endpoint.all_device();
-        let ret = client
-            .post(url)
-            .header("CK", project_key)
-            .json(new_device)
-            .send()
-            .await?
-            .text()
-            .await?;
-        Ok(ret)
-    }
-
-    async fn delete_device(
-        client: &Client,
-        endpoint: &Endpoint,
-        project_key: &str,
-        target: &str,
-    ) -> Result<()> {
-        let url = endpoint.device(target);
-        let _ret = client
-            .delete(url)
-            .header("CK", project_key)
-            .send()
-            .await?
-            .error_for_status()?;
-        Ok(())
-    }
-
-    async fn create_sensor(
-        client: &Client,
-        endpoint: &Endpoint,
-        project_key: &str,
-        device_id: &str,
-        new_sensor: &Sensor,
-    ) -> Result<String> {
-        let url = endpoint.all_sensor(device_id);
-        let ret = client
-            .post(url)
-            .header("CK", project_key)
-            .json(new_sensor)
-            .send()
-            .await?
-            .text()
-            .await?;
-        Ok(ret)
-    }
-
-    async fn delete_sensor(
-        client: &Client,
-        endpoint: &Endpoint,
-        project_key: &str,
-        device_id: &str,
-        sensor_id: &str,
-    ) -> Result<()> {
-        let url = endpoint.sensor(device_id, sensor_id);
-        let _ret = client
-            .delete(url)
-            .header("CK", project_key)
-            .send()
-            .await?
-            .error_for_status()?;
-        Ok(())
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ProjectContext {
@@ -545,13 +452,8 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
             let client = reqwest::Client::new();
 
             let sensors = device_signal().sensors.unwrap_or_default();
-            let raw_datas = client
-                .get(endpoint().rawdata(&device_id))
-                .header("CK", project_key)
-                .send()
-                .await?
-                .json::<Vec<RawData>>()
-                .await?;
+            let raw_datas =
+                ApiHelper::fetch_raw_data(&client, &endpoint(), &device_id, &project_key).await?;
             let raw_data_map: HashMap<String, RawData> =
                 raw_datas.into_iter().map(|d| (d.id.clone(), d)).collect();
             let sensor_data: Vec<_> = sensors
@@ -817,15 +719,15 @@ fn SensorCard(
             let device_id = device_id();
             let project_key = project().project_key;
             let snapshot_id = first_value[11..].to_string();
-            let url = endpoint().snapshot(&device_id, &sensor_id, &snapshot_id);
-            let img = client
-                .get(url)
-                .header("CK", project_key.as_str())
-                .send()
-                .await?
-                .bytes()
-                .await?;
-            let img_b64 = String::from("data:image/jpeg;base64,") + &BASE64_STANDARD.encode(img);
+            let img_b64 = ApiHelper::fetch_snapshot_base64(
+                &client,
+                &endpoint(),
+                &device_id,
+                &sensor_id,
+                &snapshot_id,
+                &project_key,
+            )
+            .await?;
             Ok(img_b64)
         } else {
             Err(anyhow!("Not a snapshot"))
@@ -966,24 +868,14 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
             ..Default::default()
         };
         let client = Client::new();
-        let url = endpoint().device(&device_id());
         let toastapi = use_toast();
 
-        let json_text = serde_json::to_string(&edit_device);
-        tracing::debug!("{:?}", json_text);
-        let result = client
-            .put(url)
-            .header("CK", &project().project_key)
-            .json(&edit_device)
-            .send()
-            .await;
+        let result =
+            ApiHelper::update_device(&client, &endpoint(), &project().project_key, &device_id(), &edit_device)
+                .await;
 
         match result {
-            Ok(data) => {
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
+            Ok(text) => {
                 toastapi.success(
                     "Updated".to_string(),
                     ToastOptions::new()
@@ -1011,24 +903,14 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
             ..Default::default()
         };
         let client = Client::new();
-        let url = endpoint().device(&device_id());
         let toastapi = use_toast();
 
-        let json_text = serde_json::to_string(&edit_device);
-        tracing::debug!("{:?}", json_text);
-        let result = client
-            .put(url)
-            .header("CK", &project().project_key)
-            .json(&edit_device)
-            .send()
-            .await;
+        let result =
+            ApiHelper::update_device(&client, &endpoint(), &project().project_key, &device_id(), &edit_device)
+                .await;
 
         match result {
-            Ok(data) => {
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
+            Ok(text) => {
                 toastapi.success(
                     "Updated".to_string(),
                     ToastOptions::new()
@@ -1159,42 +1041,19 @@ fn MonitorPanel(
     endpoint: ReadSignal<Endpoint>,
     device: ReadSignal<Device>,
 ) -> Element {
-    let active_status = use_resource(move || async move {
+    let active_status: Resource<Result<Option<ActiveInfo>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        let url = endpoint().active(&device().id);
-        client
-            .get(url)
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await?
-            .json::<Option<ActiveInfo>>()
-            .await
+        ApiHelper::fetch_active_info(&client, &endpoint(), &device().id, &project().project_key).await
     });
 
     let active_setting: Resource<Result<ActiveDevice>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        let url = endpoint().active_setting(&device().id);
-        let ret = client
-            .get(url)
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await?
-            .json::<ActiveDevice>()
-            .await?;
-        Ok(ret)
+        ApiHelper::fetch_active_setting(&client, &endpoint(), &device().id, &project().project_key).await
     });
 
     let active_notify: Resource<Result<Vec<ActiveNotify>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        let url = endpoint().active_notify(&device().id);
-        let ret = client
-            .get(url)
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await?
-            .json::<Vec<ActiveNotify>>()
-            .await?;
-        Ok(ret)
+        ApiHelper::fetch_active_notifies(&client, &endpoint(), &device().id, &project().project_key).await
     });
 
     let active_rsx = if let Some(active_status) = &*active_status.read() {
@@ -1302,7 +1161,6 @@ fn ActiveSettingSection(
     let save_active_setting = move |_| async move {
         let toastapi = use_toast();
         let client = reqwest::Client::new();
-        let url = endpoint().active_setting(&device().id);
         let edit_active = ActiveDevice {
             device_id: device().id.clone(),
             enable: setting_clone().enable,
@@ -1312,19 +1170,17 @@ fn ActiveSettingSection(
             sensor: setting_clone().sensor.clone(),
             create_time: setting().create_time,
         };
-        let result = client
-            .post(url)
-            .header("CK", project().project_key.as_str())
-            .json(&edit_active)
-            .send()
-            .await;
+        let result = ApiHelper::update_active_setting(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device().id,
+            &edit_active,
+        )
+        .await;
 
         match result {
-            Ok(data) => {
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
+            Ok(text) => {
                 toastapi.success(
                     "Updated".to_string(),
                     ToastOptions::new()
@@ -1448,20 +1304,17 @@ fn ActiveNotifySection(
             create_time: String::new(),
         };
 
-        let url = endpoint().active_notify(&device().id);
-        let result = client
-            .post(url)
-            .header("CK", project().project_key.as_str())
-            .json(&new_notify)
-            .send()
-            .await;
+        let result = ApiHelper::upsert_active_notify(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device().id,
+            &new_notify,
+        )
+        .await;
 
         match result {
-            Ok(data) => {
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
+            Ok((_, text)) => {
                 toastapi.success(
                     "Updated".to_string(),
                     ToastOptions::new()
@@ -1542,21 +1395,17 @@ fn ActiveNotifyCard(
             return;
         }
 
-        let url = endpoint().active_notify(&device().id);
-        let result = client
-            .post(url)
-            .header("CK", project().project_key.as_str())
-            .json(&edit_notify)
-            .send()
-            .await;
+        let result = ApiHelper::upsert_active_notify(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device().id,
+            &edit_notify,
+        )
+        .await;
 
         match result {
-            Ok(data) => {
-                let status = data.status();
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
+            Ok((status, text)) => {
                 if status.is_success() {
                     toastapi.success(
                         "Updated".to_string(),
@@ -1585,12 +1434,14 @@ fn ActiveNotifyCard(
             }
         }
 
-        let delete_url = endpoint().active_notify_delete(&device().id, notify_edit().id);
-        let _ret = client
-            .delete(delete_url)
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await;
+        let _ret = ApiHelper::delete_active_notify(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device().id,
+            notify_edit().id,
+        )
+        .await;
         active_notify.restart();
     };
 
@@ -1598,19 +1449,17 @@ fn ActiveNotifyCard(
         delete_dialog_open.set(false);
         let client = reqwest::Client::new();
         let toastapi = use_toast();
-        let delete_url = endpoint().active_notify_delete(&device().id, notify().id);
-        let ret = client
-            .delete(delete_url)
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await;
+        let ret = ApiHelper::delete_active_notify(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device().id,
+            notify().id,
+        )
+        .await;
 
         match ret {
-            Ok(data) => {
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
+            Ok(text) => {
                 toastapi.success(
                     "Delete".to_string(),
                     ToastOptions::new()
@@ -1759,22 +1608,20 @@ pub fn SensorAttr(
             ..Default::default()
         };
         let client = Client::new();
-        let url = endpoint().sensor(&device_id(), &sensor_id());
         let toastapi = use_toast();
 
-        let result = client
-            .put(url)
-            .header("CK", &project().project_key)
-            .json(&edit_sensor)
-            .send()
-            .await;
+        let result = ApiHelper::update_sensor(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device_id(),
+            &sensor_id(),
+            &edit_sensor,
+        )
+        .await;
 
         match result {
-            Ok(data) => {
-                let text = data
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Error parse String".to_string());
+            Ok(text) => {
                 toastapi.success(
                     "Updated".to_string(),
                     ToastOptions::new()
@@ -1947,7 +1794,6 @@ pub fn SensorHistory(
 
     let raw_datas: Resource<Result<Vec<GetRawData>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        let url = endpoint().sensor_rawdata(&device_id(), &sensor_id());
         let start;
         let end;
         if use_asc() {
@@ -1960,18 +1806,19 @@ pub fn SensorHistory(
         let start_str = start.to_utc().format(&Iso8601::DATE_TIME_OFFSET)?;
         let end_str = end.to_utc().format(&Iso8601::DATE_TIME_OFFSET)?;
         let asc_or_desc = if use_asc() { "ASC" } else { "DESC" };
-        let mut url = Url::from_str(&url)?;
-        url.query_pairs_mut()
-            .append_pair("start", &start_str)
-            .append_pair("end", &end_str)
-            .append_pair("order", asc_or_desc);
-        let ret = client
-            .get(url)
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await?
-            .json::<Vec<GetRawData>>()
-            .await?;
+        let ret = ApiHelper::fetch_sensor_raw_data(
+            &client,
+            &endpoint(),
+            SensorRawDataQuery {
+                device_id: &device_id(),
+                sensor_id: &sensor_id(),
+                project_key: &project().project_key,
+                start: &start_str,
+                end: &end_str,
+                order: asc_or_desc,
+            },
+        )
+        .await?;
         let ret2 = if use_utc() {
             ret
         } else {
@@ -2016,15 +1863,15 @@ pub fn SensorHistory(
             let did = device_id();
             let project_key = project().project_key;
             let snapshot_id = snapshot_url[11..].to_string();
-            let url = endpoint().snapshot(&did, &sid, &snapshot_id);
-            let img = client
-                .get(url)
-                .header("CK", project_key.as_str())
-                .send()
-                .await?
-                .bytes()
-                .await?;
-            let img_b64 = String::from("data:image/jpeg;base64,") + &BASE64_STANDARD.encode(img);
+            let img_b64 = ApiHelper::fetch_snapshot_base64(
+                &client,
+                &endpoint(),
+                &did,
+                &sid,
+                &snapshot_id,
+                &project_key,
+            )
+            .await?;
             return Ok(Some(img_b64));
         }
         Ok(None)

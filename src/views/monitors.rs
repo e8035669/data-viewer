@@ -5,18 +5,14 @@ use async_std::task::sleep;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::checkbox::CheckboxState;
-use reqwest::Client;
 
 use crate::{
+    api::ApiHelper,
     components::{
-        badge::Badge,
-        button::Button,
         card::{Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle},
         checkbox::Checkbox,
     },
-    models::{
-        ActiveInfo, ActiveStatus, Device, Endpoint, EndpointTrait, Endpoints, Project, Projects,
-    },
+    models::{ActiveInfo, ActiveStatus, Device, Endpoint, Endpoints, Project, Projects},
     views::global::HeaderContext,
     Route,
 };
@@ -80,25 +76,16 @@ pub fn ProjectMonitor(
     let mut status_res: Resource<Result<MonitorStatus>> = use_resource(move || async move {
         is_loading.set(true);
         let client = reqwest::Client::new();
-        let devices = client
-            .get(endpoint().all_device())
-            .header("CK", project().project_key.as_str())
-            .send()
-            .await?
-            .json::<Vec<Device>>()
-            .await?;
+        let project_key = project().project_key;
+        let devices = ApiHelper::fetch_all_devices(&client, &endpoint(), &project_key).await?;
 
         let mut status = MonitorStatus::default();
         status.total = devices.len() as i32;
 
         for device in devices.iter() {
-            let info = client
-                .get(endpoint().active(&device.id))
-                .header("CK", project().project_key.as_str())
-                .send()
-                .await?
-                .json::<Option<ActiveInfo>>()
-                .await?;
+            let info =
+                ApiHelper::fetch_active_info(&client, &endpoint(), &device.id, &project_key)
+                    .await?;
             if let Some(info) = info {
                 match info.status {
                     ActiveStatus::Online => status.online += 1,
@@ -195,23 +182,6 @@ pub fn MonitorProjectSelectPage() -> Element {
     }
 }
 
-async fn request_active_info(
-    client: &Client,
-    endpoint: &Endpoint,
-    device: &Device,
-    project_id: &String,
-) -> Result<ActiveInfo> {
-    let info = client
-        .get(endpoint.active(&device.id))
-        .header("CK", project_id.as_str())
-        .send()
-        .await?
-        .json::<Option<ActiveInfo>>()
-        .await?
-        .unwrap_or_default();
-    Ok(info)
-}
-
 #[component]
 pub fn MonitorProjectPage(project_name: ReadSignal<String>) -> Element {
     use_effect(|| {
@@ -233,19 +203,14 @@ pub fn MonitorProjectPage(project_name: ReadSignal<String>) -> Element {
             let client = reqwest::Client::new();
             let project_id = project_id().ok_or_else(|| anyhow!("No project id"))?;
             let endpoint = endpoint().ok_or_else(|| anyhow!("No Endpoint"))?;
-            let url = endpoint.metadata();
-            let mut data = client
-                .get(url)
-                .header("CK", project_id.as_str())
-                .send()
-                .await?
-                .json::<Vec<Device>>()
-                .await?;
-            data.sort_by_key(|v| v.id.parse::<u64>().unwrap_or_default());
+            let data = ApiHelper::req_project_meta(&client, &endpoint, &project_id).await?;
 
             let mut active_infos = Vec::new();
             for device in data.iter() {
-                let info = request_active_info(&client, &endpoint, device, &project_id).await;
+                let info =
+                    ApiHelper::fetch_active_info(&client, &endpoint, &device.id, &project_id)
+                        .await
+                        .map(|info| info.unwrap_or_default());
                 active_infos.push(info.ok());
             }
 
