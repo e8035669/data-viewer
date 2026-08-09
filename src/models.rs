@@ -128,6 +128,11 @@ impl EditDevice {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
+pub struct DeviceResponse {
+    pub id: String,
+}
+
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct RawData {
     pub id: String,
@@ -797,8 +802,7 @@ impl EdgeAuthInfo {
             .ok_or_else(|| anyhow!("missing username in query"))?;
 
         let client = Client::new();
-        let auth =
-            EdgeAuthInfo::edge_get_auth(&client, &base_url, &username, &self.digest).await?;
+        let auth = EdgeAuthInfo::edge_get_auth(&client, &base_url, &username, &self.digest).await?;
         let edge_resp =
             EdgeAuthInfo::edge_get_project(&client, &base_url, &auth.result.access_token).await?;
 

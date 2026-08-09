@@ -151,7 +151,7 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
                 toast_api.success(
                     "Create Success".to_string(),
                     ToastOptions::new()
-                        .description(ret.as_str())
+                        .description(format!("ID: {ret}"))
                         .duration(Duration::from_secs(10)),
                 );
             }
@@ -247,9 +247,43 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
         }
     };
 
+    let on_export_settings = move |_| {
+        let data = project_meta();
+        let project_key = project().project_key.clone();
+        spawn(async move {
+            let Ok(json) = serde_json::to_string_pretty(&data) else {
+                return;
+            };
+            let filename = format!("{project_key}-metadata.json");
+            let eval = document::eval(
+                r#"
+                let data = await dioxus.recv();
+                let filename = await dioxus.recv();
+                const blob = new Blob([data], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                "#,
+            );
+            let _ = eval.send(json);
+            let _ = eval.send(filename);
+        });
+    };
+
     rsx! {
         Breadcrumb { items: vec![BreadcrumbItem::link("Projects", Route::ProjectsView {})] }
         PageHeader { title: "Devices",
+            Button {
+                variant: ButtonVariant::Ghost,
+                onclick: on_export_settings,
+                Icon { icon: fa_solid_icons::FaFileExport }
+                "匯出設定"
+            }
             Button {
                 onclick: move |_| {
                     new_device.set(EditDevice::new());
@@ -280,6 +314,11 @@ pub fn DeviceCard(
     device: ReadSignal<Device>,
     delete_ctx: Store<DeleteCtx>,
 ) -> Element {
+    let ProjectContext {
+        project, endpoint, ..
+    } = use_context();
+    let mut project_resource: Resource<Result<Vec<Device>>> = use_context();
+
     let desc = device().desc.unwrap_or_default();
     let nav2 = navigator();
     let view_device_attr = move |_| {
@@ -290,6 +329,33 @@ pub fn DeviceCard(
     };
     let on_delete = move |_| {
         delete_ctx.prompt_delete(&device().id);
+    };
+    let on_duplicate = move |_| async move {
+        let toast_api = use_toast();
+        let client = Client::new();
+        let ep = endpoint();
+        let pk = project().project_key;
+        let dev = device();
+        let ret = ApiHelper::duplicate_device(&client, &ep, &pk, &dev).await;
+        match ret {
+            Ok(new_id) => {
+                toast_api.success(
+                    "複製成功".to_string(),
+                    ToastOptions::new()
+                        .description(format!("新裝置 ID: {new_id}"))
+                        .duration(Duration::from_secs(10)),
+                );
+                project_resource.restart();
+            }
+            Err(e) => {
+                toast_api.error(
+                    "複製失敗".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e:?}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
     };
     rsx! {
         Card {
@@ -317,6 +383,15 @@ pub fn DeviceCard(
                             }
                             DropdownMenuItem::<String> {
                                 index: 1usize,
+                                value: "Duplicate".to_string(),
+                                on_select: on_duplicate,
+                                div { class: "flex gap-2",
+                                    Icon { icon: fa_solid_icons::FaCopy }
+                                    "複製"
+                                }
+                            }
+                            DropdownMenuItem::<String> {
+                                index: 2usize,
                                 value: "Delete".to_string(),
                                 on_select: on_delete,
                                 div { class: "flex gap-2",
@@ -870,9 +945,14 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
         let client = Client::new();
         let toastapi = use_toast();
 
-        let result =
-            ApiHelper::update_device(&client, &endpoint(), &project().project_key, &device_id(), &edit_device)
-                .await;
+        let result = ApiHelper::update_device(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device_id(),
+            &edit_device,
+        )
+        .await;
 
         match result {
             Ok(text) => {
@@ -905,9 +985,14 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
         let client = Client::new();
         let toastapi = use_toast();
 
-        let result =
-            ApiHelper::update_device(&client, &endpoint(), &project().project_key, &device_id(), &edit_device)
-                .await;
+        let result = ApiHelper::update_device(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device_id(),
+            &edit_device,
+        )
+        .await;
 
         match result {
             Ok(text) => {
@@ -1043,17 +1128,20 @@ fn MonitorPanel(
 ) -> Element {
     let active_status: Resource<Result<Option<ActiveInfo>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        ApiHelper::fetch_active_info(&client, &endpoint(), &device().id, &project().project_key).await
+        ApiHelper::fetch_active_info(&client, &endpoint(), &device().id, &project().project_key)
+            .await
     });
 
     let active_setting: Resource<Result<ActiveDevice>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        ApiHelper::fetch_active_setting(&client, &endpoint(), &device().id, &project().project_key).await
+        ApiHelper::fetch_active_setting(&client, &endpoint(), &device().id, &project().project_key)
+            .await
     });
 
     let active_notify: Resource<Result<Vec<ActiveNotify>>> = use_resource(move || async move {
         let client = reqwest::Client::new();
-        ApiHelper::fetch_active_notifies(&client, &endpoint(), &device().id, &project().project_key).await
+        ApiHelper::fetch_active_notifies(&client, &endpoint(), &device().id, &project().project_key)
+            .await
     });
 
     let active_rsx = if let Some(active_status) = &*active_status.read() {

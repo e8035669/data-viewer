@@ -10,8 +10,8 @@ use base64::prelude::*;
 use reqwest::{Client, Url};
 
 use crate::models::{
-    ActiveDevice, ActiveInfo, ActiveNotify, Device, EditDevice, EditSensor, Endpoint,
-    EndpointTrait, GetRawData, RawData, Rule1, Sensor,
+    ActiveDevice, ActiveInfo, ActiveNotify, Device, DeviceResponse, EditDevice, EditSensor,
+    Endpoint, EndpointTrait, GetRawData, RawData, Rule1, Sensor,
 };
 
 pub struct ApiHelper;
@@ -75,9 +75,9 @@ impl ApiHelper {
             .json(new_device)
             .send()
             .await?
-            .text()
+            .json::<DeviceResponse>()
             .await?;
-        Ok(ret)
+        Ok(ret.id)
     }
 
     pub async fn update_device(
@@ -113,6 +113,31 @@ impl ApiHelper {
             .await?
             .error_for_status()?;
         Ok(())
+    }
+
+    /// Creates a new device that copies `device`'s name/desc/type/attributes, then re-creates
+    /// each of its sensors (id/name/type/attributes) under the new device. Does not copy raw
+    /// sensor data or active monitor setting/notifications. Returns the new device's id.
+    pub async fn duplicate_device(
+        client: &Client,
+        endpoint: &Endpoint,
+        project_key: &str,
+        device: &Device,
+    ) -> Result<String> {
+        let new_device = EditDevice {
+            name: device.name.clone(),
+            desc: device.desc.clone(),
+            kind: device.kind.clone(),
+            uri: device.uri.clone(),
+            lat: device.lat,
+            lon: device.lon,
+            attributes: device.attributes.clone(),
+        };
+        let new_id = Self::create_device(client, endpoint, project_key, &new_device).await?;
+        for sensor in device.sensors.iter().flatten() {
+            Self::create_sensor(client, endpoint, project_key, &new_id, sensor).await?;
+        }
+        Ok(new_id)
     }
 
     // ─── Sensor ──────────────────────────────────────────────────────────
