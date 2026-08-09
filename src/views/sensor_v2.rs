@@ -1476,12 +1476,12 @@ fn SensorCard(
                                 }
                             }
                             DropdownMenuItem::<String> {
-                                value: "Attributes".to_string(),
+                                value: "Setting".to_string(),
                                 index: 1usize,
                                 on_select: attr_click,
                                 div { class: "flex gap-2",
-                                    Icon { icon: fa_solid_icons::FaSliders }
-                                    "Attributes"
+                                    Icon { icon: fa_solid_icons::FaGear }
+                                    "Setting"
                                 }
                             }
                             DropdownMenuItem::<String> {
@@ -1705,6 +1705,9 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
             }
         }
         div {
+            if attributes().is_empty() {
+                p { "No attributes" }
+            }
             for (i , attr) in attributes().iter().enumerate() {
                 div { class: "flex gap-4 mb-8",
                     div { class: "flex flex-1 gap-4 flex-wrap",
@@ -2308,6 +2311,58 @@ pub fn SensorAttr(
         }
     });
 
+    let mut sensor_info = use_signal(move || sensor_signal());
+    let is_sensor_info_dirty = use_memo(move || {
+        sensor_info().name != sensor_signal().name
+            || sensor_info().desc != sensor_signal().desc
+            || sensor_info().kind != sensor_signal().kind
+            || sensor_info().uri != sensor_signal().uri
+            || sensor_info().formula != sensor_signal().formula
+    });
+
+    let save_sensor_info = move |_| async move {
+        let edit_sensor = EditSensor {
+            name: sensor_info().name.clone(),
+            desc: sensor_info().desc.clone(),
+            kind: sensor_info().kind,
+            uri: sensor_info().uri.clone(),
+            formula: sensor_info().formula.clone(),
+            ..Default::default()
+        };
+        let client = Client::new();
+        let toastapi = use_toast();
+
+        let result = ApiHelper::update_sensor(
+            &client,
+            &endpoint(),
+            &project().project_key,
+            &device_id(),
+            &sensor_id(),
+            &edit_sensor,
+        )
+        .await;
+
+        match result {
+            Ok(text) => {
+                toastapi.success(
+                    "Updated".to_string(),
+                    ToastOptions::new()
+                        .description(text)
+                        .duration(Duration::from_secs(10)),
+                );
+                project_resource.restart();
+            }
+            Err(e) => {
+                toastapi.error(
+                    "Update Failed".to_string(),
+                    ToastOptions::new()
+                        .description(format!("{e}"))
+                        .duration(Duration::from_secs(10)),
+                );
+            }
+        }
+    };
+
     let mut attributes = use_signal(move || sensor_signal().attributes.unwrap_or_default());
     let is_dirty = use_memo(move || attributes() != sensor_signal().attributes.unwrap_or_default());
 
@@ -2352,6 +2407,12 @@ pub fn SensorAttr(
         }
     };
 
+    let sensor_type_items = SensorType::iter().enumerate().map(|(i, t)| {
+        rsx! {
+            RadioItem { index: i, value: serde_json::to_string(&t).unwrap(), {t.to_string()} }
+        }
+    });
+
     rsx! {
         Breadcrumb {
             items: vec![
@@ -2372,6 +2433,61 @@ pub fn SensorAttr(
             ],
         }
         PageHeader { title: sensor_signal().name }
+
+        div { class: "grid grid-cols-[1fr_auto] items-center mt-8",
+            h1 { class: "text-2xl font-bold", "Sensor Info" }
+            Button {
+                variant: if is_sensor_info_dirty() { ButtonVariant::Primary } else { ButtonVariant::Secondary },
+                onclick: save_sensor_info,
+                "Save"
+            }
+        }
+        div { class: "grid grid-cols-[auto_auto] gap-2 w-full",
+            div { "ID" }
+            div { {sensor_signal().id} }
+            div { "Type" }
+            div {
+                RadioGroup {
+                    on_value_change: move |v: String| {
+                        if let Ok(v) = serde_json::from_str(&v) {
+                            sensor_info.write().kind = v;
+                        }
+                    },
+                    value: serde_json::to_string(&sensor_info().kind).unwrap(),
+                    {sensor_type_items}
+                }
+            }
+            div { "Name" }
+            div {
+                Input {
+                    class: format!("{} {}", InputStyles::dx_input, "w-full"),
+                    oninput: move |i: FormEvent| { sensor_info.write().name = i.value() },
+                    value: sensor_info().name,
+                }
+            }
+            div { "Desc" }
+            div {
+                Textarea {
+                    oninput: move |i: FormEvent| { sensor_info.write().desc = Some(i.value()) },
+                    value: sensor_info().desc,
+                }
+            }
+            div { "URI" }
+            div {
+                Input {
+                    class: format!("{} {}", InputStyles::dx_input, "w-full"),
+                    oninput: move |i: FormEvent| { sensor_info.write().uri = Some(i.value()) },
+                    value: sensor_info().uri,
+                }
+            }
+            div { "Formula" }
+            div {
+                Textarea {
+                    oninput: move |i: FormEvent| { sensor_info.write().formula = Some(i.value()) },
+                    value: sensor_info().formula,
+                }
+            }
+        }
 
         Card {
             CardHeader {
