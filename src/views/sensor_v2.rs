@@ -295,6 +295,9 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
         {dialog}
         {delete_dialog}
         div { class: "grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start",
+            if project_meta().is_empty() {
+                p { "No device, Add new one" }
+            }
             for d in project_meta() {
                 DeviceCard {
                     key: "{d.id}",
@@ -728,6 +731,9 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
             if let Some(response) = &*resource.read() {
                 match response {
                     Ok(sensors) => rsx! {
+                        if sensors.is_empty() {
+                            p { "No sensor, Add new one" }
+                        }
                         for s in sensors {
                             SensorCard {
                                 key: "{s.sensor.id}",
