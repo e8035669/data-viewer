@@ -367,9 +367,6 @@
   .mt-\[5px\]\! {
     margin-top: 5px !important;
   }
-  .mr-4 {
-    margin-right: calc(var(--spacing) * 4);
-  }
   .mr-\[5px\]\! {
     margin-right: 5px !important;
   }
@@ -1238,6 +1235,11 @@
       @media (hover: hover) {
         background-color: var(--color-slate-200);
       }
+    }
+  }
+  .sm\:mr-4 {
+    @media (width >= 40rem) {
+      margin-right: calc(var(--spacing) * 4);
     }
   }
   .sm\:grid-cols-1 {
