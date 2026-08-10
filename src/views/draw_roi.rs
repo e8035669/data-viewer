@@ -7,6 +7,7 @@ use crate::{
         scroll_area::ScrollArea,
         toolbar::{Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator},
     },
+    ui::custom::DxInput,
     views::global::HeaderContext,
 };
 use async_std::task::sleep;
@@ -28,9 +29,6 @@ use dioxus_primitives::{
 use euclid::{point2, size2, Point2D};
 use indexmap::{IndexMap, IndexSet};
 use time::OffsetDateTime;
-
-#[css_module("/src/components/input/style.css")]
-struct InputStyles;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolMode {
@@ -1845,8 +1843,8 @@ pub fn DrawRoiPage() -> Element {
             }
 
             div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
-                Input {
-                    class: format!("{} {}", InputStyles::dx_input, "font-mono"),
+                DxInput {
+                    class: "font-mono",
                     placeholder: "貼上 Base64 圖片字串（可含 data:image/...;base64, 前綴）",
                     value: image_base64_input(),
                     oninput: on_image_base64_input,
@@ -1859,8 +1857,8 @@ pub fn DrawRoiPage() -> Element {
             }
 
             div { class: "grid grid-cols-[1fr_auto] gap-2 items-center",
-                Input {
-                    class: format!("{} {}", InputStyles::dx_input, "font-mono"),
+                DxInput {
+                    class: "font-mono",
                     placeholder: "貼上 ROI 清單字串",
                     value: roi_import_text(),
                     oninput: on_roi_import_input,
