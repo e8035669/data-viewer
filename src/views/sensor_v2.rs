@@ -470,8 +470,9 @@ struct SensorDiff {
     id: String,
     before: Option<Sensor>,
     after: Option<Sensor>,
-    /// Uploaded sensor has a blank id, which the API does not accept on create.
-    invalid: bool,
+    /// Set when this entry can't be safely applied (blank id, or an id duplicated
+    /// elsewhere in the same device's uploaded sensor list).
+    invalid_reason: Option<String>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -542,6 +543,14 @@ fn diff_sensors(current: &[Sensor], uploaded: &[Sensor]) -> Vec<SensorDiff> {
         .filter(|s| !s.id.is_empty())
         .map(|s| (s.id.as_str(), s))
         .collect();
+    // Count non-blank ids so duplicates within this device's uploaded sensors can be flagged;
+    // applying them in sequence would otherwise let the later one silently overwrite the earlier.
+    let mut id_counts: HashMap<&str, usize> = HashMap::new();
+    for s in uploaded {
+        if !s.id.is_empty() {
+            *id_counts.entry(s.id.as_str()).or_insert(0) += 1;
+        }
+    }
     let mut uploaded_ids: HashSet<&str> = HashSet::new();
     let mut diffs = Vec::new();
 
@@ -552,27 +561,29 @@ fn diff_sensors(current: &[Sensor], uploaded: &[Sensor]) -> Vec<SensorDiff> {
                 id: String::new(),
                 before: None,
                 after: Some(s.clone()),
-                invalid: true,
+                invalid_reason: Some("感測器 ID 不可為空白".to_string()),
             });
             continue;
         }
         uploaded_ids.insert(s.id.as_str());
+        let duplicated = id_counts.get(s.id.as_str()).copied().unwrap_or(0) > 1;
+        let invalid_reason = duplicated.then(|| "同一裝置內感測器 ID 重複".to_string());
         match current_by_id.get(s.id.as_str()) {
             None => diffs.push(SensorDiff {
                 kind: ChangeKind::Create,
                 id: s.id.clone(),
                 before: None,
                 after: Some(s.clone()),
-                invalid: false,
+                invalid_reason,
             }),
             Some(cur) => {
-                if *cur != s {
+                if duplicated || *cur != s {
                     diffs.push(SensorDiff {
                         kind: ChangeKind::Update,
                         id: s.id.clone(),
                         before: Some((*cur).clone()),
                         after: Some(s.clone()),
-                        invalid: false,
+                        invalid_reason,
                     });
                 }
             }
@@ -586,7 +597,7 @@ fn diff_sensors(current: &[Sensor], uploaded: &[Sensor]) -> Vec<SensorDiff> {
                 id: s.id.clone(),
                 before: Some(s.clone()),
                 after: None,
-                invalid: false,
+                invalid_reason: None,
             });
         }
     }
@@ -682,9 +693,9 @@ async fn execute_import_plan(
                 match ApiHelper::create_device(client, endpoint, project_key, &edit_device).await {
                     Ok(new_id) => {
                         for sd in &d.sensor_diffs {
-                            if sd.invalid {
+                            if let Some(reason) = &sd.invalid_reason {
                                 errors.push(format!(
-                                    "新增裝置「{}」的感測器 ID 不可為空白，已略過",
+                                    "新增裝置「{}」的感測器已略過（{reason}）",
                                     after.name
                                 ));
                                 continue;
@@ -743,8 +754,8 @@ async fn execute_import_plan(
                 }
 
                 for sd in &d.sensor_diffs {
-                    if sd.invalid {
-                        errors.push("感測器 ID 不可為空白，已略過".to_string());
+                    if let Some(reason) = &sd.invalid_reason {
+                        errors.push(format!("感測器已略過（{reason}）"));
                         continue;
                     }
                     match sd.kind {
@@ -830,7 +841,7 @@ fn ImportSettingsDialog(
     let has_invalid = use_memo(move || {
         plan()
             .iter()
-            .any(|d| d.sensor_diffs.iter().any(|sd| sd.invalid))
+            .any(|d| d.sensor_diffs.iter().any(|sd| sd.invalid_reason.is_some()))
     });
 
     let mut close_and_reset = move |v: bool| {
@@ -1033,9 +1044,9 @@ fn SensorDiffRow(diff: SensorDiff) -> Element {
             if !changed_fields.is_empty() {
                 span { class: "text-xs text-slate-400", "變更: {changed_fields.join(\", \")}" }
             }
-            if diff.invalid {
+            if let Some(reason) = &diff.invalid_reason {
                 span { class: "px-1.5 py-0.5 border rounded text-xs shrink-0 text-red-600 dark:text-red-400 border-red-600 dark:border-red-400",
-                    "ID 不可為空白"
+                    "{reason}"
                 }
             }
         }
