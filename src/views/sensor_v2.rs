@@ -7,8 +7,7 @@ use crate::{
         button::{Button, ButtonVariant},
         card::{Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle},
         dialog::{Dialog, DialogDescription, DialogTitle},
-        dropdown_menu::{DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger},
-        input::Input,
+        dropdown_menu::{DropdownMenu, DropdownMenuContent, DropdownMenuItem},
         label::Label,
         radio_group::{RadioGroup, RadioItem},
         select::{Select, SelectGroup, SelectOption},
@@ -22,6 +21,7 @@ use crate::{
     },
     ui::{
         breadcrumb::{Breadcrumb, BreadcrumbItem},
+        custom::{DxDropdownMenuContent, DxDropdownMenuTrigger, DxInput},
         page_header::PageHeader,
     },
     views::global::HeaderContext,
@@ -37,9 +37,6 @@ use strum::IntoEnumIterator;
 use time::format_description::well_known::Iso8601;
 use time::macros::{datetime, format_description, offset};
 use time::{Date, OffsetDateTime};
-
-#[css_module("/src/components/input/style.css")]
-struct InputStyles;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ProjectContext {
@@ -174,7 +171,7 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
             DialogTitle { "New Device" }
             div { class: "grid grid-cols-1 gap-4",
                 Label { html_for: "add_device_name", "Name" }
-                Input {
+                DxInput {
                     id: "add_device_name",
                     value: new_device().name,
                     oninput: move |e: FormEvent| new_device.write().name = e.value(),
@@ -286,9 +283,7 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
                 Icon { icon: fa_solid_icons::FaFileImport }
                 "匯入設定"
             }
-            Button {
-                variant: ButtonVariant::Ghost,
-                onclick: on_export_settings,
+            Button { variant: ButtonVariant::Ghost, onclick: on_export_settings,
                 Icon { icon: fa_solid_icons::FaFileExport }
                 "匯出設定"
             }
@@ -382,14 +377,10 @@ pub fn DeviceCard(
                 CardDescription { {desc} }
                 CardAction {
                     DropdownMenu {
-                        DropdownMenuTrigger {
-                            r#as: |attributes| rsx! {
-                                Button { attributes, variant: ButtonVariant::Ghost, class: "shadow-none!",
-                                    Icon { icon: fa_solid_icons::FaEllipsisVertical }
-                                }
-                            },
+                        DxDropdownMenuTrigger {
+                            Icon { icon: fa_solid_icons::FaEllipsisVertical }
                         }
-                        DropdownMenuContent { class: "left-auto! right-0! origin-top-right!",
+                        DxDropdownMenuContent {
                             DropdownMenuItem::<String> {
                                 index: 0usize,
                                 value: "Setting".to_string(),
@@ -699,9 +690,14 @@ async fn execute_import_plan(
                                 continue;
                             }
                             if let Some(s) = &sd.after {
-                                if let Err(e) =
-                                    ApiHelper::create_sensor(client, endpoint, project_key, &new_id, s)
-                                        .await
+                                if let Err(e) = ApiHelper::create_sensor(
+                                    client,
+                                    endpoint,
+                                    project_key,
+                                    &new_id,
+                                    s,
+                                )
+                                .await
                                 {
                                     errors.push(format!(
                                         "新增裝置「{}」的感測器「{}」失敗: {e}",
@@ -733,9 +729,14 @@ async fn execute_import_plan(
                         lon: after.lon,
                         attributes: after.attributes.clone(),
                     };
-                    if let Err(e) =
-                        ApiHelper::update_device(client, endpoint, project_key, &device_id, &edit_device)
-                            .await
+                    if let Err(e) = ApiHelper::update_device(
+                        client,
+                        endpoint,
+                        project_key,
+                        &device_id,
+                        &edit_device,
+                    )
+                    .await
                     {
                         errors.push(format!("更新裝置「{}」失敗: {e}", after.name));
                     }
@@ -826,8 +827,11 @@ fn ImportSettingsDialog(
     let mut parse_error = use_signal(String::new);
     let mut plan = use_signal(Vec::<DeviceDiff>::new);
     let mut is_executing = use_signal(|| false);
-    let has_invalid =
-        use_memo(move || plan().iter().any(|d| d.sensor_diffs.iter().any(|sd| sd.invalid)));
+    let has_invalid = use_memo(move || {
+        plan()
+            .iter()
+            .any(|d| d.sensor_diffs.iter().any(|sd| sd.invalid))
+    });
 
     let mut close_and_reset = move |v: bool| {
         open.set(v);
@@ -899,7 +903,9 @@ fn ImportSettingsDialog(
                 ImportStep::Upload => rsx! {
                     DialogDescription {
                         div { class: "flex flex-col gap-4 text-left",
-                            p { "請選擇先前匯出的設定檔（JSON），系統會比對目前的裝置與感測器並列出異動清單。" }
+                            p {
+                                "請選擇先前匯出的設定檔（JSON），系統會比對目前的裝置與感測器並列出異動清單。"
+                            }
                             div { class: "relative w-full border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-lg p-6 flex flex-col items-center gap-2 cursor-pointer",
                                 div { class: "text-3xl pointer-events-none",
                                     Icon { icon: fa_solid_icons::FaCloudArrowUp }
@@ -943,7 +949,11 @@ fn ImportSettingsDialog(
                             variant: ButtonVariant::Primary,
                             disabled: is_executing() || plan().is_empty() || has_invalid(),
                             onclick: on_confirm,
-                            if is_executing() { "執行中..." } else { "確認匯入" }
+                            if is_executing() {
+                                "執行中..."
+                            } else {
+                                "確認匯入"
+                            }
                         }
                     }
                 },
@@ -974,7 +984,9 @@ fn DeviceDiffCard(diff: DeviceDiff) -> Element {
     rsx! {
         div { class: "border border-slate-200 dark:border-zinc-800 rounded-lg p-3",
             div { class: "flex items-center gap-2 flex-wrap",
-                span { class: "px-2 py-0.5 border rounded text-xs shrink-0 {class}", "{label}" }
+                span { class: "px-2 py-0.5 border rounded text-xs shrink-0 {class}",
+                    "{label}"
+                }
                 span { class: "font-semibold", "{name}" }
                 span { class: "text-xs text-slate-500 dark:text-slate-400", "{id_display}" }
             }
@@ -1220,14 +1232,14 @@ pub fn DeviceSensors(project_name: ReadSignal<String>, device_id: ReadSignal<Str
             DialogTitle { "New Sensor" }
             div { class: "grid grid-cols-1 gap-4",
                 Label { html_for: "new_sensor_id", "ID *" }
-                Input {
+                DxInput {
                     id: "new_sensor_id",
                     required: true,
                     value: new_sensor.id(),
                     oninput: move |e: FormEvent| new_sensor.id().set(e.value()),
                 }
                 Label { html_for: "new_sensor_name", "Name" }
-                Input {
+                DxInput {
                     id: "new_sensor_name",
                     value: new_sensor.name(),
                     oninput: move |e: FormEvent| new_sensor.name().set(e.value()),
@@ -1458,14 +1470,10 @@ fn SensorCard(
                 CardTitle { {sensor().name} }
                 CardAction {
                     DropdownMenu {
-                        DropdownMenuTrigger {
-                            r#as: |attributes| rsx! {
-                                Button { attributes, variant: ButtonVariant::Ghost, class: "shadow-none!",
-                                    Icon { icon: fa_solid_icons::FaEllipsisVertical }
-                                }
-                            },
+                        DxDropdownMenuTrigger {
+                            Icon { icon: fa_solid_icons::FaEllipsisVertical }
                         }
-                        DropdownMenuContent { class: "left-auto! right-0! origin-top-right!",
+                        DxDropdownMenuContent {
                             DropdownMenuItem::<String> {
                                 value: "History".to_string(),
                                 index: 0usize,
@@ -1667,8 +1675,8 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
             div { {device_signal().kind} }
             div { "Name" }
             div {
-                Input {
-                    class: format!("{} {}", InputStyles::dx_input, "w-full"),
+                DxInput {
+                    class: "w-full",
                     oninput: move |i: FormEvent| { device_info.write().name = i.value() },
                     value: device_info().name,
                 }
@@ -1711,16 +1719,16 @@ pub fn DeviceAttr(project_name: ReadSignal<String>, device_id: ReadSignal<String
             for (i , attr) in attributes().iter().enumerate() {
                 div { class: "flex gap-4 mb-8",
                     div { class: "flex flex-1 gap-4 flex-wrap",
-                        Input {
-                            class: format!("{} {}", InputStyles::dx_input, "flex-1"),
+                        DxInput {
+                            class: "flex-1",
                             placeholder: "Key",
                             onchange: move |e: FormEvent| {
                                 attributes.write()[i].key = e.value();
                             },
                             value: attr.key.clone(),
                         }
-                        Input {
-                            class: format!("{} {}", InputStyles::dx_input, "flex-1"),
+                        DxInput {
+                            class: "flex-1",
                             placeholder: "Value",
                             onchange: move |e: FormEvent| {
                                 attributes.write()[i].value = e.value();
@@ -1939,14 +1947,14 @@ fn ActiveSettingSection(
             }
             div { "Period:" }
             div {
-                Input {
+                DxInput {
                     value: setting_clone().period,
                     onchange: move |e: FormEvent| setting_clone.write().period = e.value(),
                 }
             }
             div { "Min Uploads:" }
             div {
-                Input {
+                DxInput {
                     value: setting_clone().min_uploads.map(|v| v.to_string()),
                     onchange: move |e: FormEvent| {
                         if e.value().is_empty() {
@@ -1959,7 +1967,7 @@ fn ActiveSettingSection(
             }
             div { "Max Uploads:" }
             div {
-                Input {
+                DxInput {
                     value: setting_clone().max_uploads.map(|v| v.to_string()),
                     onchange: move |e: FormEvent| {
                         if e.value().is_empty() {
@@ -2234,14 +2242,14 @@ fn ActiveNotifyCard(
                 div { {notify().id.to_string()} }
                 div { class: "font-semibold", "Name:" }
                 div {
-                    Input {
+                    DxInput {
                         value: notify_edit().name,
                         oninput: move |e: FormEvent| notify_edit.write().name = e.value(),
                     }
                 }
                 div { class: "font-semibold", "Type:" }
                 div {
-                    Input {
+                    DxInput {
                         value: notify_edit().kind,
                         oninput: move |e: FormEvent| notify_edit.write().kind = e.value(),
                     }
@@ -2459,8 +2467,8 @@ pub fn SensorAttr(
             }
             div { "Name" }
             div {
-                Input {
-                    class: format!("{} {}", InputStyles::dx_input, "w-full"),
+                DxInput {
+                    class: "w-full",
                     oninput: move |i: FormEvent| { sensor_info.write().name = i.value() },
                     value: sensor_info().name,
                 }
@@ -2474,8 +2482,8 @@ pub fn SensorAttr(
             }
             div { "URI" }
             div {
-                Input {
-                    class: format!("{} {}", InputStyles::dx_input, "w-full"),
+                DxInput {
+                    class: "w-full",
                     oninput: move |i: FormEvent| { sensor_info.write().uri = Some(i.value()) },
                     value: sensor_info().uri,
                 }
@@ -2520,16 +2528,16 @@ pub fn SensorAttr(
                 for (i , attr) in attributes().iter().enumerate() {
                     div { class: "flex gap-4 mb-8",
                         div { class: "flex flex-1 gap-4 flex-wrap",
-                            Input {
-                                class: format!("{} {}", InputStyles::dx_input, "flex-1"),
+                            DxInput {
+                                class: "flex-1",
                                 placeholder: "Key",
                                 onchange: move |e: FormEvent| {
                                     attributes.write()[i].key = e.value();
                                 },
                                 value: attr.key.clone(),
                             }
-                            Input {
-                                class: format!("{} {}", InputStyles::dx_input, "flex-1"),
+                            DxInput {
+                                class: "flex-1",
                                 placeholder: "Value",
                                 onchange: move |e: FormEvent| {
                                     attributes.write()[i].value = e.value();
@@ -2768,7 +2776,7 @@ pub fn SensorHistory(
                 Button { onclick: minus_one_day,
                     Icon { icon: fa_solid_icons::FaChevronLeft }
                 }
-                Input {
+                DxInput {
                     r#type: "date",
                     oninput: move |e: FormEvent| {
                         let d = Date::parse(e.value().as_str(), &Iso8601::DATE);
@@ -2788,7 +2796,7 @@ pub fn SensorHistory(
                 Button { onclick: minus_one_hour,
                     Icon { icon: fa_solid_icons::FaChevronLeft }
                 }
-                Input {
+                DxInput {
                     r#type: "time",
                     oninput: move |e: FormEvent| {
                         let t = time::Time::parse(e.value().as_str(), &Iso8601::TIME);
