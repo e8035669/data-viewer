@@ -48,3 +48,9 @@ pub use darkmode::ThemeProvider;
 
 mod preference;
 pub use preference::PreferencePage;
+
+mod export;
+pub use export::{ExportDataPage, ExportSnapshotsPage};
+
+mod testing;
+pub use testing::TestPage;

@@ -148,6 +148,11 @@ pub fn Navbar() -> Element {
                                     icon: fa_solid_icons::FaLink,
                                     "TestRule1"
                                 }
+                                SidebarLink {
+                                    to: Route::TestPage {},
+                                    icon: fa_solid_icons::FaLink,
+                                    "Test Page"
+                                }
                             }
                         }
                     }

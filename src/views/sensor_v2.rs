@@ -39,10 +39,10 @@ use time::macros::{datetime, format_description, offset};
 use time::{Date, OffsetDateTime};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct ProjectContext {
-    project: ReadSignal<Project>,
-    endpoint: ReadSignal<Endpoint>,
-    project_meta: ReadSignal<Vec<Device>>,
+pub(crate) struct ProjectContext {
+    pub(crate) project: ReadSignal<Project>,
+    pub(crate) endpoint: ReadSignal<Endpoint>,
+    pub(crate) project_meta: ReadSignal<Vec<Device>>,
 }
 
 #[component]
@@ -286,6 +286,24 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
             Button { variant: ButtonVariant::Ghost, onclick: on_export_settings,
                 Icon { icon: fa_solid_icons::FaFileExport }
                 "匯出設定"
+            }
+            Link {
+                to: Route::ExportDataPage {
+                    project_name: project_name(),
+                },
+                class: "button flex items-center gap-2",
+                "data-style": "ghost",
+                Icon { icon: fa_solid_icons::FaFileCsv }
+                "匯出資料"
+            }
+            Link {
+                to: Route::ExportSnapshotsPage {
+                    project_name: project_name(),
+                },
+                class: "button flex items-center gap-2",
+                "data-style": "ghost",
+                Icon { icon: fa_solid_icons::FaImages }
+                "匯出快照"
             }
             Button {
                 onclick: move |_| {

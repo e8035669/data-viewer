@@ -36,6 +36,9 @@ strum = { version = "0.28.0", features = ["derive"] }
 time = { version = "0.3.44", features = ["formatting", "local-offset", "macros", "parsing", "wasm-bindgen"], default-features = false }
 web-sys = { version = "0.3.99", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "HtmlImageElement", "MouseEvent", "PointerEvent", "Url"] }
 dioxus-icons = { version = "0.1.0", default-features = false }
+csv = "1.3"
+# Pure-Rust deflate backend (no C deps) so this compiles for wasm32-unknown-unknown.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [features]
 default = ["web"]

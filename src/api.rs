@@ -238,14 +238,71 @@ impl ApiHelper {
         Ok(ret)
     }
 
-    pub async fn fetch_snapshot_base64(
+    /// [`Self::fetch_sensor_raw_data`] caps each response at ~500 rows with no indication of
+    /// whether more data exists in range, so this re-queries (always ascending, ignoring
+    /// `query.order`) advancing `start` to the last row's timestamp whenever a page comes back
+    /// full, until a short page confirms there's nothing left. Use this whenever every row in
+    /// the range is needed (e.g. exporting), rather than [`Self::fetch_sensor_raw_data`] alone.
+    pub async fn fetch_all_sensor_raw_data(
+        client: &Client,
+        endpoint: &Endpoint,
+        query: SensorRawDataQuery<'_>,
+    ) -> Result<Vec<GetRawData>> {
+        const PAGE_LIMIT: usize = 500;
+
+        let mut all: Vec<GetRawData> = Vec::new();
+        let mut cursor = query.start.to_string();
+
+        loop {
+            let page = Self::fetch_sensor_raw_data(
+                client,
+                endpoint,
+                SensorRawDataQuery {
+                    device_id: query.device_id,
+                    sensor_id: query.sensor_id,
+                    project_key: query.project_key,
+                    start: &cursor,
+                    end: query.end,
+                    order: "ASC",
+                },
+            )
+            .await?;
+
+            let page_len = page.len();
+            let mut page = page;
+            // `start` is inclusive, so the first row here may duplicate the last row already
+            // collected from the previous page.
+            if let (Some(prev_last), Some(new_first)) = (all.last(), page.first()) {
+                if new_first.id == prev_last.id {
+                    page.remove(0);
+                }
+            }
+
+            let next_cursor = page.last().map(|r| r.time.clone());
+            all.extend(page);
+
+            if page_len < PAGE_LIMIT {
+                break;
+            }
+            match next_cursor {
+                // No forward progress (every row in this full page shares the cursor's
+                // timestamp already) — stop rather than loop forever.
+                Some(t) if t != cursor => cursor = t,
+                _ => break,
+            }
+        }
+
+        Ok(all)
+    }
+
+    pub async fn fetch_snapshot_bytes(
         client: &Client,
         endpoint: &Endpoint,
         device_id: &str,
         sensor_id: &str,
         snapshot_id: &str,
         project_key: &str,
-    ) -> Result<String> {
+    ) -> Result<Vec<u8>> {
         let url = endpoint.snapshot(device_id, sensor_id, snapshot_id);
         let img = client
             .get(url)
@@ -254,6 +311,26 @@ impl ApiHelper {
             .await?
             .bytes()
             .await?;
+        Ok(img.to_vec())
+    }
+
+    pub async fn fetch_snapshot_base64(
+        client: &Client,
+        endpoint: &Endpoint,
+        device_id: &str,
+        sensor_id: &str,
+        snapshot_id: &str,
+        project_key: &str,
+    ) -> Result<String> {
+        let img = Self::fetch_snapshot_bytes(
+            client,
+            endpoint,
+            device_id,
+            sensor_id,
+            snapshot_id,
+            project_key,
+        )
+        .await?;
         let img_b64 = String::from("data:image/jpeg;base64,") + &BASE64_STANDARD.encode(img);
         Ok(img_b64)
     }

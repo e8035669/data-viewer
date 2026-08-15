@@ -3,10 +3,10 @@
 use dioxus::prelude::*;
 
 use views::{
-    ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DeviceSensors, DrawRoiPage,
-    EndpointView, Home, MonitorProjectPage, MonitorProjectSelectPage, Navbar, ProjectDevices,
-    ProjectImportPage, ProjectLayout, ProjectsView, SensorAttr, SensorHistory,
-    PreferencePage, Storage, Storage2, TestRule1,
+    ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DeviceSensors, DrawRoiPage, EndpointView,
+    ExportDataPage, ExportSnapshotsPage, Home, MonitorProjectPage, MonitorProjectSelectPage,
+    Navbar, PreferencePage, ProjectDevices, ProjectImportPage, ProjectLayout, ProjectsView,
+    SensorAttr, SensorHistory, Storage, Storage2, TestPage, TestRule1,
 };
 
 use crate::views::Providers;
@@ -67,6 +67,9 @@ enum Route {
         #[route("/test_rule1")]
         TestRule1 {},
 
+        #[route("/test")]
+        TestPage {},
+
         #[route("/draw_roi")]
         DrawRoiPage {},
 
@@ -92,6 +95,12 @@ enum Route {
 
             #[route("/devices/:device_id/attr")]
             DeviceAttr { project_name: String, device_id: String },
+
+            #[route("/export-data")]
+            ExportDataPage { project_name: String },
+
+            #[route("/export-snapshots")]
+            ExportSnapshotsPage { project_name: String },
 
             #[nest("/devices/:device_id/sensors/:sensor_id")]
                 #[route("/attr")]
