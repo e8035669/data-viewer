@@ -43,6 +43,9 @@ pub use sensor_v2::{
     DeviceAttr, DeviceSensors, ProjectDevices, ProjectLayout, SensorAttr, SensorHistory,
 };
 
+mod attribute_batch;
+pub use attribute_batch::ProjectAttributeBatch;
+
 mod darkmode;
 pub use darkmode::ThemeProvider;
 
