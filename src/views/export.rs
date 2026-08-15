@@ -11,10 +11,12 @@ use std::collections::HashSet;
 use std::io::{Cursor, Write};
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
+use async_std::task::sleep;
 use base64::prelude::*;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
+use futures_util::{stream, StreamExt};
 use dioxus_primitives::calendar::DateRange;
 use dioxus_primitives::checkbox::CheckboxState;
 use dioxus_primitives::toast::{use_toast, ToastOptions};
@@ -33,7 +35,7 @@ use crate::{
         checkbox::Checkbox,
         date_picker::DatePicker,
     },
-    models::{Device, GetRawData, Sensor, SensorType},
+    models::{Device, Endpoint, GetRawData, Sensor, SensorType},
     ui::{
         breadcrumb::{Breadcrumb, BreadcrumbItem},
         page_header::PageHeader,
@@ -48,6 +50,48 @@ const PART_SIZE_LIMIT_BYTES: u64 = 500 * 1024 * 1024;
 /// Size of each base64 chunk sent to the browser per `eval.send()` call when downloading a
 /// binary part, so no single contiguous string/buffer needs to hold a whole part at once.
 const DOWNLOAD_CHUNK_BYTES: usize = 12 * 1024 * 1024;
+/// Max in-flight snapshot fetches at once — parallel enough to be fast, capped so the export
+/// doesn't look like a burst/DDoS to the server.
+const SNAPSHOT_FETCH_CONCURRENCY: usize = 4;
+/// Max retry attempts for a single snapshot fetch before giving up on it.
+const SNAPSHOT_FETCH_MAX_RETRIES: u32 = 5;
+/// Base delay before a snapshot fetch retry; doubles each attempt so repeated failures back off
+/// instead of hammering the server.
+const SNAPSHOT_FETCH_RETRY_BASE_DELAY: Duration = Duration::from_millis(300);
+
+/// Fetches one snapshot's bytes, retrying transient failures up to
+/// [`SNAPSHOT_FETCH_MAX_RETRIES`] times with exponential backoff.
+async fn fetch_snapshot_bytes_with_retry(
+    client: &Client,
+    endpoint: &Endpoint,
+    device_id: &str,
+    sensor_id: &str,
+    snapshot_id: &str,
+    project_key: &str,
+) -> Result<Vec<u8>> {
+    let mut attempt = 0;
+    loop {
+        match ApiHelper::fetch_snapshot_bytes(
+            client,
+            endpoint,
+            device_id,
+            sensor_id,
+            snapshot_id,
+            project_key,
+        )
+        .await
+        {
+            Ok(bytes) => return Ok(bytes),
+            Err(e) if attempt >= SNAPSHOT_FETCH_MAX_RETRIES => {
+                return Err(e).context(format!("已重試 {SNAPSHOT_FETCH_MAX_RETRIES} 次仍失敗"));
+            }
+            Err(_) => {
+                attempt += 1;
+                sleep(SNAPSHOT_FETCH_RETRY_BASE_DELAY * 2u32.pow(attempt - 1)).await;
+            }
+        }
+    }
+}
 
 fn allow_all_sensors(_: &Sensor) -> bool {
     true
@@ -115,7 +159,7 @@ fn date_range_to_utc_bounds(range: DateRange) -> Result<DateRangeBounds> {
         .saturating_add(time::Duration::days(1))
         .to_utc();
 
-    let filename_format = format_description!("[year][month][day]T[hour][minute][second]Z");
+    let filename_format = format_description!("[year][month][day]");
     Ok(DateRangeBounds {
         query_start: start_dt.format(&Iso8601::DATE_TIME_OFFSET)?,
         query_end: end_dt.format(&Iso8601::DATE_TIME_OFFSET)?,
@@ -824,17 +868,28 @@ pub fn ExportSnapshotsPage(project_name: ReadSignal<String>) -> Element {
         let base_name = format!("{pk}-snapshots-{}_{}", bounds.file_start, bounds.file_end);
         let mut any_success = false;
 
-        for (device, sensor, time, snapshot_id) in snapshot_refs {
-            let result = ApiHelper::fetch_snapshot_bytes(
-                &client,
-                &ep,
-                &device.id,
-                &sensor.id,
-                &snapshot_id,
-                &pk,
-            )
-            .await;
+        // Fetches run with bounded concurrency; the zip write stays sequential as each result
+        // arrives since `PartWriter` isn't safe to write to concurrently.
+        let mut fetches = stream::iter(snapshot_refs.into_iter().map(|(device, sensor, time, snapshot_id)| {
+            let client = client.clone();
+            let ep = ep.clone();
+            let pk = pk.clone();
+            async move {
+                let result = fetch_snapshot_bytes_with_retry(
+                    &client,
+                    &ep,
+                    &device.id,
+                    &sensor.id,
+                    &snapshot_id,
+                    &pk,
+                )
+                .await;
+                (device, sensor, time, snapshot_id, result)
+            }
+        }))
+        .buffer_unordered(SNAPSHOT_FETCH_CONCURRENCY);
 
+        while let Some((device, sensor, time, snapshot_id, result)) = fetches.next().await {
             match result {
                 Ok(bytes) => {
                     let path = format!(
