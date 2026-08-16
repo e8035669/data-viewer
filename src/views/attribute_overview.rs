@@ -474,12 +474,23 @@ pub fn ProjectAttributeOverview(project_name: ReadSignal<String>) -> Element {
                     }
                 }
 
-                AttributeMatrix {
-                    owners: filtered_owners(),
-                    keys: filtered_keys(),
-                    pending,
-                    baseline_owner_id: baseline_owner_id(),
-                    compare_enabled: compare_enabled(),
+                div { class: "hidden lg:block",
+                    AttributeMatrix {
+                        owners: filtered_owners(),
+                        keys: filtered_keys(),
+                        pending,
+                        baseline_owner_id: baseline_owner_id(),
+                        compare_enabled: compare_enabled(),
+                    }
+                }
+                div { class: "lg:hidden",
+                    OwnerCardsMobile {
+                        owners: filtered_owners(),
+                        keys: filtered_keys(),
+                        pending,
+                        baseline_owner_id: baseline_owner_id(),
+                        compare_enabled: compare_enabled(),
+                    }
                 }
 
                 div { class: "flex justify-end",
@@ -522,7 +533,44 @@ pub fn ProjectAttributeOverview(project_name: ReadSignal<String>) -> Element {
     }
 }
 
-// ─── Matrix table ─────────────────────────────────────────────────────────────
+// ─── Matrix table (desktop/wide screens) ─────────────────────────────────────
+
+/// Shared by the desktop table and the mobile card list so both agree on what "the baseline
+/// owner's attributes" means.
+fn build_baseline_map(
+    owners: &[OwnerData],
+    baseline_owner_id: &str,
+    compare_enabled: bool,
+) -> Option<HashMap<String, String>> {
+    if !compare_enabled {
+        return None;
+    }
+    owners
+        .iter()
+        .find(|o| owner_id_str(&o.owner) == baseline_owner_id)
+        .map(|o| o.attrs.iter().map(|a| (a.key.clone(), a.value.clone())).collect())
+}
+
+/// Shared `use_memo` plumbing for a single editable (owner, key) cell — "current value
+/// accounting for any staged edit" and "has a staged edit" — used by both the desktop table
+/// cell and the mobile card row.
+fn use_cell_state(
+    cell_id: (String, String),
+    original: Option<String>,
+    pending: Signal<HashMap<(String, String), PendingOp>>,
+) -> (Memo<Option<String>>, Memo<bool>) {
+    let pending_op = {
+        let cell_id = cell_id.clone();
+        use_memo(move || pending().get(&cell_id).cloned())
+    };
+    let display_value = use_memo(move || match pending_op() {
+        Some(PendingOp::SetValue(v)) => Some(v),
+        Some(PendingOp::Delete) => None,
+        None => original.clone(),
+    });
+    let is_dirty = use_memo(move || pending_op().is_some());
+    (display_value, is_dirty)
+}
 
 #[component]
 fn AttributeMatrix(
@@ -532,14 +580,7 @@ fn AttributeMatrix(
     baseline_owner_id: String,
     compare_enabled: bool,
 ) -> Element {
-    let baseline_map: Option<HashMap<String, String>> = if compare_enabled {
-        owners
-            .iter()
-            .find(|o| owner_id_str(&o.owner) == baseline_owner_id)
-            .map(|o| o.attrs.iter().map(|a| (a.key.clone(), a.value.clone())).collect())
-    } else {
-        None
-    };
+    let baseline_map = build_baseline_map(&owners, &baseline_owner_id, compare_enabled);
     let colspan = (keys.len() + 1).to_string();
 
     rsx! {
@@ -644,20 +685,7 @@ fn MatrixCell(
     is_baseline: bool,
 ) -> Element {
     let cell_id = (owner_id, attr_key.clone());
-
-    let pending_op = {
-        let cell_id = cell_id.clone();
-        use_memo(move || pending().get(&cell_id).cloned())
-    };
-    let display_value = {
-        let original = original.clone();
-        use_memo(move || match pending_op() {
-            Some(PendingOp::SetValue(v)) => Some(v),
-            Some(PendingOp::Delete) => None,
-            None => original.clone(),
-        })
-    };
-    let is_dirty = use_memo(move || pending_op().is_some());
+    let (display_value, is_dirty) = use_cell_state(cell_id.clone(), original.clone(), pending);
     // Plain (non-memoized) on purpose: `compare_enabled`/`baseline_value`/`is_baseline` are owned
     // props with no Signal to track, so a `use_memo` here would compute once on mount and never
     // pick up later toggles. Recomputing on every render keeps it in sync with those props.
@@ -677,6 +705,145 @@ fn MatrixCell(
         td {
             class: "p-1 align-top min-w-40 border",
             class: if differs_from_baseline { "border-amber-500 dark:border-amber-400 bg-amber-50 dark:bg-amber-950/40" } else { "border-slate-200 dark:border-zinc-800" },
+            div { class: "flex items-center gap-1",
+                DxInput {
+                    class: "flex-1",
+                    placeholder: if original.is_none() { "（未設定）" } else { "" },
+                    value: display_value().unwrap_or_default(),
+                    onchange: on_change,
+                }
+                if is_dirty() {
+                    span {
+                        class: "text-xs text-blue-600 dark:text-blue-400",
+                        title: "尚未套用",
+                        "●"
+                    }
+                }
+                if display_value().is_some() {
+                    button {
+                        class: "text-xs text-red-600 dark:text-red-400 shrink-0",
+                        r#type: "button",
+                        onclick: on_clear,
+                        "✕"
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Mobile card layout (small screens) ──────────────────────────────────────
+//
+// The wide owner×key matrix is unusable on a phone — instead each owner becomes a collapsible
+// card, and its attributes are stacked one-per-line (key label above the value input) so nothing
+// needs horizontal scrolling.
+
+#[component]
+fn OwnerCardsMobile(
+    owners: Vec<OwnerData>,
+    keys: Vec<String>,
+    pending: Signal<HashMap<(String, String), PendingOp>>,
+    baseline_owner_id: String,
+    compare_enabled: bool,
+) -> Element {
+    let baseline_map = build_baseline_map(&owners, &baseline_owner_id, compare_enabled);
+
+    rsx! {
+        div { class: "flex flex-col gap-3",
+            if owners.is_empty() {
+                div { class: "p-4 text-sm text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-zinc-800 rounded-lg",
+                    "沒有符合的裝置/感測器"
+                }
+            } else if keys.is_empty() {
+                div { class: "p-4 text-sm text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-zinc-800 rounded-lg",
+                    "此範圍內尚無任何屬性"
+                }
+            }
+            for o in owners.iter() {
+                OwnerCardMobile {
+                    key: "{owner_id_str(&o.owner)}",
+                    owner_id: owner_id_str(&o.owner),
+                    owner_label: o.label.clone(),
+                    attrs: o.attrs.clone(),
+                    keys: keys.clone(),
+                    pending,
+                    baseline_map: baseline_map.clone(),
+                    compare_enabled,
+                    is_baseline: compare_enabled && owner_id_str(&o.owner) == baseline_owner_id,
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn OwnerCardMobile(
+    owner_id: String,
+    owner_label: String,
+    attrs: Vec<Attribute>,
+    keys: Vec<String>,
+    pending: Signal<HashMap<(String, String), PendingOp>>,
+    baseline_map: Option<HashMap<String, String>>,
+    compare_enabled: bool,
+    is_baseline: bool,
+) -> Element {
+    rsx! {
+        details { class: "border border-slate-200 dark:border-zinc-800 rounded-lg overflow-hidden",
+            summary { class: "p-3 cursor-pointer select-none flex items-center gap-2 bg-slate-50 dark:bg-zinc-900 text-sm font-medium",
+                span { class: "flex-1", "{owner_label}" }
+                if is_baseline {
+                    span { class: "px-1.5 py-0.5 text-xs border rounded text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400",
+                        "基準"
+                    }
+                }
+            }
+            div { class: "flex flex-col divide-y divide-slate-200 dark:divide-zinc-800",
+                for k in keys.iter() {
+                    MobileAttributeRow {
+                        key: "{k}",
+                        owner_id: owner_id.clone(),
+                        attr_key: k.clone(),
+                        original: attrs.iter().find(|a| &a.key == k).map(|a| a.value.clone()),
+                        pending,
+                        baseline_value: baseline_map.as_ref().and_then(|m| m.get(k).cloned()),
+                        compare_enabled,
+                        is_baseline,
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn MobileAttributeRow(
+    owner_id: String,
+    attr_key: String,
+    original: Option<String>,
+    pending: Signal<HashMap<(String, String), PendingOp>>,
+    baseline_value: Option<String>,
+    compare_enabled: bool,
+    is_baseline: bool,
+) -> Element {
+    let cell_id = (owner_id, attr_key.clone());
+    let (display_value, is_dirty) = use_cell_state(cell_id.clone(), original.clone(), pending);
+    let differs_from_baseline = compare_enabled && !is_baseline && baseline_value != display_value();
+
+    let on_change = {
+        let cell_id = cell_id.clone();
+        move |e: FormEvent| {
+            pending.write().insert(cell_id.clone(), PendingOp::SetValue(e.value()));
+        }
+    };
+    let on_clear = move |_| {
+        pending.write().insert(cell_id.clone(), PendingOp::Delete);
+    };
+
+    rsx! {
+        div {
+            class: "p-2 flex flex-col gap-1",
+            class: if differs_from_baseline { "bg-amber-50 dark:bg-amber-950/40" },
+            span { class: "text-xs text-slate-500 dark:text-slate-400 font-mono break-all", "{attr_key}" }
             div { class: "flex items-center gap-1",
                 DxInput {
                     class: "flex-1",
