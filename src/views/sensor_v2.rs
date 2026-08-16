@@ -63,7 +63,7 @@ pub fn ProjectLayout(project_name: ReadSignal<String>) -> Element {
     });
     use_context_provider(|| project_meta);
 
-    let content = match &*project_meta.read_unchecked() {
+    let content = match &*project_meta.read() {
         Some(Ok(v)) => {
             if let (Some(p), Some(e)) = (project(), endpoint()) {
                 rsx! {

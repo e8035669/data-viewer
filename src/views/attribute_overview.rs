@@ -315,7 +315,7 @@ pub fn ProjectAttributeOverview(project_name: ReadSignal<String>) -> Element {
         owners()
             .into_iter()
             .filter(|o| f.is_empty() || o.label.to_lowercase().contains(&f))
-            .collect::<Vec<_>>()
+            .collect()
     });
 
     // The owner set changes whenever scope/device selection changes, so any staged edits no
@@ -551,24 +551,27 @@ fn build_baseline_map(
         .map(|o| o.attrs.iter().map(|a| (a.key.clone(), a.value.clone())).collect())
 }
 
-/// Shared `use_memo` plumbing for a single editable (owner, key) cell — "current value
-/// accounting for any staged edit" and "has a staged edit" — used by both the desktop table
-/// cell and the mobile card row.
-fn use_cell_state(
-    cell_id: (String, String),
-    original: Option<String>,
+/// Shared plumbing for a single editable (owner, key) cell — "current value accounting for any
+/// staged edit" and "has a staged edit" — used by both the desktop table cell and the mobile
+/// card row.
+///
+/// Plain (non-memoized) on purpose: `original` is an owned value with no Signal to track, so a
+/// `use_memo` here would only re-evaluate when `pending` changes and would never pick up a later
+/// refresh of `original` (e.g. after `project_resource.restart()` resolves with new server data)
+/// once `pending` had already settled back to "no staged edit". Recomputing on every render keeps
+/// it in sync with fresh `original` values.
+fn cell_state(
+    cell_id: &(String, String),
+    original: &Option<String>,
     pending: Signal<HashMap<(String, String), PendingOp>>,
-) -> (Memo<Option<String>>, Memo<bool>) {
-    let pending_op = {
-        let cell_id = cell_id.clone();
-        use_memo(move || pending().get(&cell_id).cloned())
-    };
-    let display_value = use_memo(move || match pending_op() {
+) -> (Option<String>, bool) {
+    let pending_op = pending().get(cell_id).cloned();
+    let is_dirty = pending_op.is_some();
+    let display_value = match pending_op {
         Some(PendingOp::SetValue(v)) => Some(v),
         Some(PendingOp::Delete) => None,
         None => original.clone(),
-    });
-    let is_dirty = use_memo(move || pending_op().is_some());
+    };
     (display_value, is_dirty)
 }
 
@@ -685,11 +688,8 @@ fn MatrixCell(
     is_baseline: bool,
 ) -> Element {
     let cell_id = (owner_id, attr_key.clone());
-    let (display_value, is_dirty) = use_cell_state(cell_id.clone(), original.clone(), pending);
-    // Plain (non-memoized) on purpose: `compare_enabled`/`baseline_value`/`is_baseline` are owned
-    // props with no Signal to track, so a `use_memo` here would compute once on mount and never
-    // pick up later toggles. Recomputing on every render keeps it in sync with those props.
-    let differs_from_baseline = compare_enabled && !is_baseline && baseline_value != display_value();
+    let (display_value, is_dirty) = cell_state(&cell_id, &original, pending);
+    let differs_from_baseline = compare_enabled && !is_baseline && baseline_value != display_value;
 
     let on_change = {
         let cell_id = cell_id.clone();
@@ -709,17 +709,17 @@ fn MatrixCell(
                 DxInput {
                     class: "flex-1",
                     placeholder: if original.is_none() { "（未設定）" } else { "" },
-                    value: display_value().unwrap_or_default(),
+                    value: display_value.clone().unwrap_or_default(),
                     onchange: on_change,
                 }
-                if is_dirty() {
+                if is_dirty {
                     span {
                         class: "text-xs text-blue-600 dark:text-blue-400",
                         title: "尚未套用",
                         "●"
                     }
                 }
-                if display_value().is_some() {
+                if display_value.is_some() {
                     button {
                         class: "text-xs text-red-600 dark:text-red-400 shrink-0",
                         r#type: "button",
@@ -826,8 +826,8 @@ fn MobileAttributeRow(
     is_baseline: bool,
 ) -> Element {
     let cell_id = (owner_id, attr_key.clone());
-    let (display_value, is_dirty) = use_cell_state(cell_id.clone(), original.clone(), pending);
-    let differs_from_baseline = compare_enabled && !is_baseline && baseline_value != display_value();
+    let (display_value, is_dirty) = cell_state(&cell_id, &original, pending);
+    let differs_from_baseline = compare_enabled && !is_baseline && baseline_value != display_value;
 
     let on_change = {
         let cell_id = cell_id.clone();
@@ -843,22 +843,24 @@ fn MobileAttributeRow(
         div {
             class: "p-2 flex flex-col gap-1",
             class: if differs_from_baseline { "bg-amber-50 dark:bg-amber-950/40" },
-            span { class: "text-xs text-slate-500 dark:text-slate-400 font-mono break-all", "{attr_key}" }
+            span { class: "text-xs text-slate-500 dark:text-slate-400 font-mono break-all",
+                "{attr_key}"
+            }
             div { class: "flex items-center gap-1",
                 DxInput {
                     class: "flex-1",
                     placeholder: if original.is_none() { "（未設定）" } else { "" },
-                    value: display_value().unwrap_or_default(),
+                    value: display_value.clone().unwrap_or_default(),
                     onchange: on_change,
                 }
-                if is_dirty() {
+                if is_dirty {
                     span {
                         class: "text-xs text-blue-600 dark:text-blue-400",
                         title: "尚未套用",
                         "●"
                     }
                 }
-                if display_value().is_some() {
+                if display_value.is_some() {
                     button {
                         class: "text-xs text-red-600 dark:text-red-400 shrink-0",
                         r#type: "button",

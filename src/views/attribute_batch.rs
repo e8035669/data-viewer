@@ -627,10 +627,7 @@ pub fn ProjectAttributeBatch(project_name: ReadSignal<String>) -> Element {
 fn AttrRowView(row: AttrRow, pending: Signal<HashMap<String, PendingOp>>, selected: Signal<HashSet<String>>) -> Element {
     let rid = row_id(&row);
 
-    let is_checked = {
-        let rid = rid.clone();
-        use_memo(move || selected().contains(&rid))
-    };
+    let is_checked = selected().contains(&rid);
     let on_toggle = {
         let rid = rid.clone();
         move |v: CheckboxState| {
@@ -645,18 +642,16 @@ fn AttrRowView(row: AttrRow, pending: Signal<HashMap<String, PendingOp>>, select
         }
     };
 
-    let pending_op = {
-        let rid = rid.clone();
-        use_memo(move || pending().get(&rid).cloned())
+    // Plain (non-memoized) on purpose: `row.value` is an owned prop with no Signal to track, so a
+    // `use_memo` here would only re-run when `pending` changes and would never pick up a later
+    // refresh of `row.value` (e.g. after `project_resource.restart()` resolves) once `pending` had
+    // already settled back to "no staged edit".
+    let pending_op = pending().get(&rid).cloned();
+    let display_value = match &pending_op {
+        Some(PendingOp::SetValue(v)) => v.clone(),
+        _ => row.value.clone(),
     };
-    let display_value = {
-        let original = row.value.clone();
-        use_memo(move || match pending_op() {
-            Some(PendingOp::SetValue(v)) => v,
-            _ => original.clone(),
-        })
-    };
-    let is_delete_pending = use_memo(move || matches!(pending_op(), Some(PendingOp::Delete)));
+    let is_delete_pending = matches!(pending_op, Some(PendingOp::Delete));
 
     let on_value_change = {
         let rid = rid.clone();
@@ -671,7 +666,7 @@ fn AttrRowView(row: AttrRow, pending: Signal<HashMap<String, PendingOp>>, select
     rsx! {
         div { class: "grid grid-cols-[auto_1fr_2fr] items-center gap-3 p-3",
             Checkbox {
-                checked: if is_checked() { CheckboxState::Checked } else { CheckboxState::Unchecked },
+                checked: if is_checked { CheckboxState::Checked } else { CheckboxState::Unchecked },
                 on_checked_change: on_toggle,
             }
             div { class: "flex flex-col gap-1",
@@ -683,14 +678,14 @@ fn AttrRowView(row: AttrRow, pending: Signal<HashMap<String, PendingOp>>, select
                     if let Some(badge) = &occurrence_badge {
                         span { "{badge}" }
                     }
-                    if is_delete_pending() {
+                    if is_delete_pending {
                         span { class: "text-red-600 dark:text-red-400", "將刪除" }
                     }
                 }
             }
             DxInput {
                 placeholder: if exists { "" } else { "輸入以新增此屬性" },
-                value: display_value(),
+                value: display_value,
                 onchange: on_value_change,
             }
         }
