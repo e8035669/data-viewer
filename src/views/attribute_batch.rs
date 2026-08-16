@@ -35,7 +35,7 @@ use crate::{
 // ─── Scope (which set of owners the key search covers) ──────────────────────
 
 #[derive(Clone, Copy, PartialEq, Default)]
-enum AttrScope {
+pub(crate) enum AttrScope {
     #[default]
     AllDevice,
     OneDeviceSensors,
@@ -43,7 +43,7 @@ enum AttrScope {
 }
 
 impl AttrScope {
-    fn as_str(&self) -> &'static str {
+    pub(crate) fn as_str(&self) -> &'static str {
         match self {
             AttrScope::AllDevice => "all_device",
             AttrScope::OneDeviceSensors => "one_device_sensor",
@@ -51,7 +51,7 @@ impl AttrScope {
         }
     }
 
-    fn from_str(s: &str) -> Self {
+    pub(crate) fn from_str(s: &str) -> Self {
         match s {
             "one_device_sensor" => AttrScope::OneDeviceSensors,
             "all_device_sensor" => AttrScope::AllDevicesSensors,
@@ -63,7 +63,7 @@ impl AttrScope {
 // ─── Owner identity (a Device or a Sensor under a Device) ────────────────────
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-enum OwnerKey {
+pub(crate) enum OwnerKey {
     Device(String),
     Sensor(String, String),
 }
@@ -172,20 +172,20 @@ fn build_rows(devices: &[Device], scope: AttrScope, key: &str, selected_device_i
 // ─── Staged edits ─────────────────────────────────────────────────────────────
 
 #[derive(Clone, PartialEq)]
-enum PendingOp {
+pub(crate) enum PendingOp {
     SetValue(String),
     Delete,
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum ChangeKind {
+pub(crate) enum ChangeKind {
     Create,
     Update,
     Delete,
 }
 
 impl ChangeKind {
-    fn label_and_class(&self) -> (&'static str, &'static str) {
+    pub(crate) fn label_and_class(&self) -> (&'static str, &'static str) {
         match self {
             ChangeKind::Create => (
                 "新增",

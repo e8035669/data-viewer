@@ -306,6 +306,15 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
                 "匯出快照"
             }
             Link {
+                to: Route::ProjectAttributeOverview {
+                    project_name: project_name(),
+                },
+                class: "button flex items-center gap-2",
+                "data-style": "ghost",
+                Icon { icon: fa_solid_icons::FaTableCells }
+                "屬性總覽"
+            }
+            Link {
                 to: Route::ProjectAttributeBatch {
                     project_name: project_name(),
                 },

@@ -5,9 +5,9 @@ use dioxus::prelude::*;
 use views::{
     ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DeviceSensors, DrawRoiPage, EndpointView,
     ExportDataPage, ExportSnapshotsPage, Home, MonitorProjectPage, MonitorProjectSelectPage,
-    Navbar, PreferencePage, ProjectAttributeBatch, ProjectDevices, ProjectImportPage,
-    ProjectLayout, ProjectsView, SensorAttr, SensorHistory, Storage, Storage2, TestPage,
-    TestRule1,
+    Navbar, PreferencePage, ProjectAttributeBatch, ProjectAttributeOverview, ProjectDevices,
+    ProjectImportPage, ProjectLayout, ProjectsView, SensorAttr, SensorHistory, Storage, Storage2,
+    TestPage, TestRule1,
 };
 
 use crate::views::Providers;
@@ -105,6 +105,9 @@ enum Route {
 
             #[route("/attributes")]
             ProjectAttributeBatch { project_name: String },
+
+            #[route("/attributes/overview")]
+            ProjectAttributeOverview { project_name: String },
 
             #[nest("/devices/:device_id/sensors/:sensor_id")]
                 #[route("/attr")]

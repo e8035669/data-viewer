@@ -46,6 +46,9 @@ pub use sensor_v2::{
 mod attribute_batch;
 pub use attribute_batch::ProjectAttributeBatch;
 
+mod attribute_overview;
+pub use attribute_overview::ProjectAttributeOverview;
+
 mod darkmode;
 pub use darkmode::ThemeProvider;
 
