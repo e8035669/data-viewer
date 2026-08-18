@@ -103,11 +103,13 @@ enum Route {
             #[route("/export-snapshots")]
             ExportSnapshotsPage { project_name: String },
 
-            #[route("/attributes")]
-            ProjectAttributeBatch { project_name: String },
+            #[nest("/attributes")]
+                #[route("/batch")]
+                ProjectAttributeBatch { project_name: String },
 
-            #[route("/attributes/overview")]
-            ProjectAttributeOverview { project_name: String },
+                #[route("/overview")]
+                ProjectAttributeOverview { project_name: String },
+            #[end_nest]
 
             #[nest("/devices/:device_id/sensors/:sensor_id")]
                 #[route("/attr")]
