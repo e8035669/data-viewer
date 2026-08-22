@@ -10,7 +10,7 @@ use crate::{
     ui::custom::DxInput,
     views::global::HeaderContext,
 };
-use async_std::task::sleep;
+use dioxus_sdk_time::sleep;
 use base64::prelude::*;
 use dioxus::{
     html::{

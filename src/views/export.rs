@@ -12,7 +12,7 @@ use std::io::{Cursor, Write};
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
-use async_std::task::sleep;
+use dioxus_sdk_time::sleep;
 use base64::prelude::*;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};

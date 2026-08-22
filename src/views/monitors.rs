@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use async_std::task::sleep;
+use dioxus_sdk_time::sleep;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::checkbox::CheckboxState;

@@ -16,7 +16,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-async-std = "1.13.2"
 base64 = "0.23"
 dioxus = { version = "0.7.10", features = ["router"] }
 futures-util = "0.3"
@@ -25,6 +24,7 @@ dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version 
 # dioxus-sdk-storage = "0.7.0"
 # Android target need latest version
 dioxus-sdk-storage = { version = "0.7.0", git = "https://github.com/DioxusLabs/sdk", branch = "main" }
+dioxus-sdk-time = "0.7.0"
 euclid = "0.22.14"
 indexmap = "2.14.0"
 # Android target cannot update to 0.13
