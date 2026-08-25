@@ -323,6 +323,15 @@ pub fn ProjectDevices(project_name: ReadSignal<String>) -> Element {
                 Icon { icon: fa_solid_icons::FaPenToSquare }
                 "批次修改屬性"
             }
+            Link {
+                to: Route::ProjectActiveSettingOverview {
+                    project_name: project_name(),
+                },
+                class: "button flex items-center gap-2",
+                "data-style": "ghost",
+                Icon { icon: fa_solid_icons::FaGaugeHigh }
+                "主動監控總覽"
+            }
             Button {
                 onclick: move |_| {
                     new_device.set(EditDevice::new());

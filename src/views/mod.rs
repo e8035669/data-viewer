@@ -49,6 +49,9 @@ pub use attribute_batch::ProjectAttributeBatch;
 mod attribute_overview;
 pub use attribute_overview::ProjectAttributeOverview;
 
+mod active_overview;
+pub use active_overview::ProjectActiveSettingOverview;
+
 mod darkmode;
 pub use darkmode::ThemeProvider;
 

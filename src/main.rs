@@ -5,9 +5,9 @@ use dioxus::prelude::*;
 use views::{
     ActiveMonitorView, AuthInfosPage, Blog, DeviceAttr, DeviceSensors, DrawRoiPage, EndpointView,
     ExportDataPage, ExportSnapshotsPage, Home, MonitorProjectPage, MonitorProjectSelectPage,
-    Navbar, PreferencePage, ProjectAttributeBatch, ProjectAttributeOverview, ProjectDevices,
-    ProjectImportPage, ProjectLayout, ProjectsView, SensorAttr, SensorHistory, Storage, Storage2,
-    TestPage, TestRule1,
+    Navbar, PreferencePage, ProjectActiveSettingOverview, ProjectAttributeBatch,
+    ProjectAttributeOverview, ProjectDevices, ProjectImportPage, ProjectLayout, ProjectsView,
+    SensorAttr, SensorHistory, Storage, Storage2, TestPage, TestRule1,
 };
 
 use crate::views::Providers;
@@ -102,6 +102,11 @@ enum Route {
 
             #[route("/export-snapshots")]
             ExportSnapshotsPage { project_name: String },
+
+            #[nest("/active-monitor")]
+                #[route("/overview")]
+                ProjectActiveSettingOverview { project_name: String },
+            #[end_nest]
 
             #[nest("/attributes")]
                 #[route("/batch")]

@@ -385,6 +385,7 @@ impl ApiHelper {
             .json(setting)
             .send()
             .await?
+            .error_for_status()?
             .text()
             .await?;
         Ok(ret)
