@@ -28,10 +28,10 @@ use crate::{
     Route,
 };
 use anyhow::{anyhow, Error, Result};
-use dioxus_sdk_time::sleep;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_solid_icons, Icon};
 use dioxus_primitives::toast::{use_toast, ToastOptions};
+use dioxus_sdk_time::sleep;
 use reqwest::Client;
 use strum::IntoEnumIterator;
 use time::format_description::well_known::Iso8601;
@@ -1998,6 +1998,7 @@ fn ActiveSettingSection(
                     value: setting_clone().period,
                     onchange: move |e: FormEvent| setting_clone.write().period = e.value(),
                 }
+                p { class: "text-xs", "Example: 5m, 1h, 1d. For 1 hour 30 minutes, use '1h 30m'." }
             }
             div { "Min Uploads:" }
             div {
@@ -2023,6 +2024,10 @@ fn ActiveSettingSection(
                             setting_clone.write().max_uploads = Some(value);
                         }
                     },
+                }
+                p { class: "text-xs",
+                    "During a period, maximum and minimum numbers of times uploading data to the server. "
+                    "If the number of uploads is not in this range. It is considered as abnormal."
                 }
             }
             div { "Sensor" }
